@@ -5,6 +5,7 @@ out/
 # Database files
 *.sb
 *.db
+*.wal
 
 # Logs
 *.log

@@ -5,3 +5,6 @@ javac -d out -sourcepath src src/store/*.java src/serializer/*.java
 Test
 javac -d out -sourcepath src src/Main.java
 java -cp out Main
+
+javac -d out -sourcepath "src;test" src/store/*.java src/serializer/*.java src/memtable/*.java src/engine/*.java test/*.java
+java -cp out test.TestRunner
