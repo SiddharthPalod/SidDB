@@ -1,0 +1,7 @@
+
+Compilation
+javac -d out -sourcepath src src/store/*.java src/serializer/*.java
+
+Test
+javac -d out -sourcepath src src/Main.java
+java -cp out Main
