@@ -23,6 +23,9 @@ public class TestRunner {
         List<TestEntry> testSuites = new ArrayList<>();
         testSuites.add(new TestEntry("Phase 1: Bitcask DiskStore Test", Phase1DiskStoreTest::run));
         testSuites.add(new TestEntry("Phase 2: WAL & Crash Recovery Test", Phase2WALTest::run));
+        testSuites.add(new TestEntry("Phase 3: SSTable (.sb, .idx, .bf) Test", Phase3SSTableTest::run));
+        testSuites.add(new TestEntry("Phase 3: LevelManager & MemTable Flush Test", Phase3LevelTest::run));
+        testSuites.add(new TestEntry("Phase 3: L0 -> L1 -> L2 Cascading Compaction Test", Phase3CompactionTest::run));
 
         System.out.println("=================================================");
         System.out.println("          SidDB Regression Test Suite            ");

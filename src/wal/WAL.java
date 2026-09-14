@@ -49,6 +49,13 @@ public class WAL implements AutoCloseable {
         return records;
     }
     
+    // Truncates the WAL once in-memory mutations are safely flushed to an SSTable.
+    public synchronized void truncate() throws IOException {
+        fileHandle.setLength(0);
+        fileHandle.seek(0);
+        fileHandle.getFD().sync();
+    }
+    
     @Override
     public synchronized void close() throws IOException {
         fileHandle.getFD().sync();
