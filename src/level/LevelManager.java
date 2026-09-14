@@ -1,5 +1,6 @@
 package level;
 
+import sstable.BlockCache;
 import sstable.SSTableEntry;
 import sstable.SSTableReader;
 import sstable.SSTableWriter;
@@ -17,8 +18,13 @@ public class LevelManager implements AutoCloseable {
     private final File manifestFile;
     private final List<Level> levels;
     private final AtomicLong nextSequenceNumber;
+    private final BlockCache blockCache;
 
     public LevelManager(String dbDirPath) throws IOException {
+        this(dbDirPath, new BlockCache());
+    }
+
+    public LevelManager(String dbDirPath, BlockCache blockCache) throws IOException {
         this.dbDirectory = new File(dbDirPath);
         if (!this.dbDirectory.exists()) {
             this.dbDirectory.mkdirs();
@@ -29,6 +35,7 @@ public class LevelManager implements AutoCloseable {
             this.levels.add(new Level(i));
         }
         this.nextSequenceNumber = new AtomicLong(1);
+        this.blockCache = (blockCache != null) ? blockCache : new BlockCache();
 
         // Recover existing SSTables from Manifest if present
         recoverFromManifest();
@@ -57,7 +64,7 @@ public class LevelManager implements AutoCloseable {
                     String basePath = dis.readUTF();
                     File dataFile = new File(basePath + ".sb");
                     if (dataFile.exists()) {
-                        SSTableReader reader = SSTableReader.open(basePath);
+                        SSTableReader reader = SSTableReader.open(basePath, blockCache);
                         level.addTable(reader);
                     }
                 }
@@ -106,7 +113,19 @@ public class LevelManager implements AutoCloseable {
         String basePath = new File(dbDirectory, fileName).getAbsolutePath();
 
         SSTableWriter.write(basePath, entries);
-        return SSTableReader.open(basePath);
+        return SSTableReader.open(basePath, blockCache);
+    }
+
+    public synchronized SSTableReader createSSTable(List<SSTableEntry> entries) throws IOException {
+        if (entries == null || entries.isEmpty()) {
+            return null;
+        }
+
+        String fileName = String.format("sst_%05d", nextSequenceNumber.getAndIncrement());
+        String basePath = new File(dbDirectory, fileName).getAbsolutePath();
+
+        SSTableWriter.writeEntries(basePath, entries);
+        return SSTableReader.open(basePath, blockCache);
     }
 
     /**
@@ -122,9 +141,19 @@ public class LevelManager implements AutoCloseable {
         return reader;
     }
 
+    public synchronized SSTableReader flushMemTableToL0(List<SSTableEntry> entries) throws IOException {
+        SSTableReader reader = createSSTable(entries);
+        if (reader != null) {
+            levels.get(0).addTable(reader);
+            saveManifest();
+            System.out.println("[LevelManager] Flushed " + entries.size() + " entries into L0 SSTable: " + reader.getBasePath() + " (Total L0 tables: " + levels.get(0).size() + ")");
+        }
+        return reader;
+    }
+
     /**
      * Atomically replaces old tables with new compacted tables across two levels, saves the manifest,
-     * closes the old readers, and deletes the old .sb, .idx, and .bf files.
+     * invalidates block cache for old tables, closes old readers, and deletes old files.
      */
     public synchronized void replaceLevelTables(
             int fromLevelNum, List<SSTableReader> fromOldTables,
@@ -143,14 +172,15 @@ public class LevelManager implements AutoCloseable {
         // 1. Atomically save manifest with the updated state
         saveManifest();
 
-        // 2. Close and physically delete old files
+        // 2. Invalidate cache, close readers, and physically delete old files
         List<SSTableReader> allOldTables = new ArrayList<>();
         allOldTables.addAll(fromOldTables);
         allOldTables.addAll(toOldTables);
 
         for (SSTableReader oldReader : allOldTables) {
-            oldReader.close();
             String path = oldReader.getBasePath();
+            blockCache.invalidateSSTable(path);
+            oldReader.close();
             new File(path + ".sb").delete();
             new File(path + ".idx").delete();
             new File(path + ".bf").delete();
@@ -170,6 +200,19 @@ public class LevelManager implements AutoCloseable {
         return null;
     }
 
+    /**
+     * Multi-level hierarchy query respecting Snapshot Isolation.
+     */
+    public synchronized SSTableEntry get(String key, long maxSequenceNumber) throws IOException {
+        for (Level level : levels) {
+            SSTableEntry entry = level.get(key, maxSequenceNumber);
+            if (entry != null) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
     public synchronized Level getLevel(int levelNum) {
         if (levelNum >= 0 && levelNum < levels.size()) {
             return levels.get(levelNum);
@@ -183,6 +226,10 @@ public class LevelManager implements AutoCloseable {
 
     public File getDbDirectory() {
         return dbDirectory;
+    }
+
+    public BlockCache getBlockCache() {
+        return blockCache;
     }
 
     @Override

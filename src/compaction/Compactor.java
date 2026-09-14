@@ -15,9 +15,15 @@ public class Compactor {
     public static final int TARGET_ENTRIES_PER_SSTABLE = 1000;
 
     private final LevelManager levelManager;
+    private final int targetEntriesPerTable;
 
     public Compactor(LevelManager levelManager) {
+        this(levelManager, 4);
+    }
+
+    public Compactor(LevelManager levelManager, int targetEntriesPerTable) {
         this.levelManager = levelManager;
+        this.targetEntriesPerTable = Math.max(1, targetEntriesPerTable);
     }
 
     /**
@@ -148,7 +154,7 @@ public class Compactor {
         }
 
         List<SSTableReader> newTables = new ArrayList<>();
-        Map<String, Object> currentChunk = new TreeMap<>();
+        List<SSTableEntry> currentChunk = new ArrayList<>();
         String lastKey = null;
 
         // Check if toLevel is the bottom-most level containing data to decide tombstone GC
@@ -177,14 +183,14 @@ public class Compactor {
                     // Purge tombstone from disk completely!
                     continue;
                 } else {
-                    currentChunk.put(key, null); // Retain tombstone to shadow deeper levels
+                    currentChunk.add(currentEntry); // Retain tombstone to shadow deeper levels
                 }
             } else {
-                currentChunk.put(key, currentEntry.getValue());
+                currentChunk.add(currentEntry);
             }
 
-            // If chunk reaches target size, flush a partitioned SSTable for toLevel
-            if (currentChunk.size() >= TARGET_ENTRIES_PER_SSTABLE) {
+            // If chunk reaches target size, flush a partitioned non-overlapping SSTable for toLevel
+            if (currentChunk.size() >= targetEntriesPerTable) {
                 SSTableReader newTable = levelManager.createSSTable(currentChunk);
                 newTables.add(newTable);
                 currentChunk.clear();

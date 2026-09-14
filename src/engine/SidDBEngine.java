@@ -5,11 +5,15 @@ import level.LevelManager;
 import memtable.MemTable;
 import serializer.DeserializedData;
 import sstable.SSTableEntry;
+import tx.Snapshot;
+import tx.WriteBatch;
 import wal.WAL;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SidDBEngine implements AutoCloseable {
 
@@ -22,6 +26,7 @@ public class SidDBEngine implements AutoCloseable {
     private final LevelManager levelManager;
     private final Compactor compactor;
     private final int memTableThreshold;
+    private final AtomicLong sequenceNumber;
 
     public SidDBEngine() throws IOException {
         this("data", DEFAULT_MEMTABLE_THRESHOLD);
@@ -44,7 +49,8 @@ public class SidDBEngine implements AutoCloseable {
         this.frozenMemTable = null;
         this.wal = new WAL(new File(dir, "siddb.wal").getAbsolutePath());
         this.levelManager = new LevelManager(dir.getAbsolutePath());
-        this.compactor = new Compactor(this.levelManager);
+        this.compactor = new Compactor(this.levelManager, this.memTableThreshold);
+        this.sequenceNumber = new AtomicLong(System.currentTimeMillis() / 1000);
 
         // Replay any un-flushed WAL records from previous run
         recover();
@@ -57,74 +63,100 @@ public class SidDBEngine implements AutoCloseable {
         for (DeserializedData entry : entries) {
             String key = entry.getKey().toString();
             Object value = entry.getValue();
+            long epoch = entry.getEpoch();
+            if (epoch > sequenceNumber.get()) {
+                sequenceNumber.set(epoch);
+            }
             // Retain tombstones (value == null) in active memory so they shadow disk tables
-            activeMemTable.put(key, value);
+            activeMemTable.put(key, value, epoch);
         }
         System.out.println("[Engine] WAL replay complete (" + entries.size() + " records replayed into active MemTable).");
     }
 
     /**
-     * Puts a key-value pair into the database:
-     * 1. Appends to WAL (durability).
-     * 2. Puts into active MemTable.
-     * 3. Triggers flush to L0 SSTable if threshold reached.
-     */
-    public synchronized void put(String key, Object value) throws IOException {
-        // 1. Write to WAL first
-        wal.append(key, value);
-
-        // 2. Write to active MemTable
-        activeMemTable.put(key, value);
-
-        // 3. Flush to L0 if MemTable reached threshold
-        if (activeMemTable.size() >= memTableThreshold) {
-            flushMemTable();
-        }
-    }
-
-    /**
-     * Deletes a key by logging a tombstone (null value):
-     * 1. Appends tombstone to WAL.
-     * 2. Puts tombstone in active MemTable to shadow older disk values.
+     * Executes a multi-key atomic WriteBatch (ACID Atomicity & Durability):
+     * 1. Atomically appends the entire batch to the WAL (fsync).
+     * 2. Applies all mutations into the active MemTable with a monotonic sequence number.
      * 3. Triggers flush if threshold reached.
      */
-    public synchronized void delete(String key) throws IOException {
-        wal.append(key, null);
-        activeMemTable.put(key, null); // Keep tombstone in MemTable
+    public synchronized void write(WriteBatch batch) throws IOException {
+        if (batch == null || batch.size() == 0) {
+            return;
+        }
 
+        long seq = sequenceNumber.incrementAndGet();
+
+        // 1. Write entire batch atomically to WAL first
+        wal.appendBatch(batch, seq);
+
+        // 2. Apply all mutations into active MemTable
+        for (WriteBatch.Op op : batch.getOperations()) {
+            activeMemTable.put(op.getKey(), op.getValue(), seq);
+        }
+
+        // 3. Flush if threshold reached
         if (activeMemTable.size() >= memTableThreshold) {
             flushMemTable();
         }
     }
 
     /**
-     * 4-Tier Hierarchical Read Path:
-     * Step 1: Active MemTable (RAM)
-     * Step 2: Frozen MemTable (RAM, if currently flushing)
-     * Step 3: Level 0 SSTables (Disk, newest to oldest)
-     * Step 4: Level 1..N SSTables (Disk, partitioned ranges)
+     * Puts a single key-value pair using an atomic WriteBatch.
+     */
+    public synchronized void put(String key, Object value) throws IOException {
+        write(new WriteBatch().put(key, value));
+    }
+
+    /**
+     * Deletes a key by logging a tombstone via an atomic WriteBatch.
+     */
+    public synchronized void delete(String key) throws IOException {
+        write(new WriteBatch().delete(key));
+    }
+
+    /**
+     * Returns a point-in-time Snapshot for MVCC Snapshot Isolation.
+     */
+    public synchronized Snapshot getSnapshot() {
+        return new Snapshot(sequenceNumber.get());
+    }
+
+    /**
+     * Point lookup for latest active state.
      */
     public synchronized Object get(String key) throws IOException {
-        // Step 1: Active MemTable
-        if (activeMemTable.containsKey(key)) {
-            return activeMemTable.get(key); // returns value, or null if deleted tombstone
+        return get(key, Long.MAX_VALUE);
+    }
+
+    /**
+     * Point lookup respecting MVCC Snapshot Isolation:
+     * Reads the database state exactly as it existed at the snapshot sequence number.
+     */
+    public synchronized Object get(String key, Snapshot snapshot) throws IOException {
+        return get(key, snapshot.getSequenceNumber());
+    }
+
+    private synchronized Object get(String key, long maxSeq) throws IOException {
+        // Step 1: Active MemTable (filtered by snapshot sequence number)
+        if (activeMemTable.containsKey(key, maxSeq)) {
+            return activeMemTable.get(key, maxSeq);
         }
 
         // Step 2: Frozen MemTable
-        if (frozenMemTable != null && frozenMemTable.containsKey(key)) {
-            return frozenMemTable.get(key);
+        if (frozenMemTable != null && frozenMemTable.containsKey(key, maxSeq)) {
+            return frozenMemTable.get(key, maxSeq);
         }
 
         // Step 3 & 4: Disk Levels (L0 -> L1 -> L2 ... LN)
-        SSTableEntry diskEntry = levelManager.get(key);
+        SSTableEntry diskEntry = levelManager.get(key, maxSeq);
         if (diskEntry != null) {
             if (diskEntry.isTombstone()) {
-                return null; // Shadowed by deletion tombstone
+                return null;
             }
             return diskEntry.getValue();
         }
 
-        return null; // Not found anywhere
+        return null;
     }
 
     /**
@@ -138,18 +170,18 @@ public class SidDBEngine implements AutoCloseable {
         System.out.println("[Engine] Freezing active MemTable and flushing to Level 0 SSTable...");
 
         // 1. Freeze active MemTable
-        Map<String, Object> snapshot = activeMemTable.getEntries();
+        List<SSTableEntry> sstEntries = activeMemTable.getLatestSSTableEntries();
         this.frozenMemTable = new MemTable();
-        for (Map.Entry<String, Object> e : snapshot.entrySet()) {
-            this.frozenMemTable.put(e.getKey(), e.getValue());
+        for (SSTableEntry e : sstEntries) {
+            this.frozenMemTable.put(e.getKey(), e.getValue(), e.getEpoch());
         }
 
         // 2. Clear active MemTable & reset WAL for new writes
         activeMemTable.clear();
         wal.truncate();
 
-        // 3. Write frozen snapshot to L0 SSTable
-        levelManager.flushMemTableToL0(snapshot);
+        // 3. Write frozen snapshot to L0 SSTable preserving exact epochs/seq
+        levelManager.flushMemTableToL0(sstEntries);
 
         // 4. Clear frozen MemTable
         this.frozenMemTable = null;
@@ -210,6 +242,10 @@ public class SidDBEngine implements AutoCloseable {
         return levelManager;
     }
 
+    public synchronized sstable.BlockCache getBlockCache() {
+        return levelManager.getBlockCache();
+    }
+
     public synchronized Compactor getCompactor() {
         return compactor;
     }
@@ -220,6 +256,10 @@ public class SidDBEngine implements AutoCloseable {
 
     public synchronized MemTable getActiveMemTable() {
         return activeMemTable;
+    }
+
+    public long getSequenceNumber() {
+        return sequenceNumber.get();
     }
 
     @Override

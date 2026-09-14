@@ -1,76 +1,136 @@
 package memtable;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 public class MemTable {
 
-    // Sentinel to represent a deletion tombstone in ConcurrentSkipListMap (which disallows null values)
-    private static final Object TOMBSTONE_SENTINEL = new Object();
+    public static class ValueEntry {
+        private final Object value;
+        private final boolean isTombstone;
+        private final long sequenceNumber;
 
-    private final ConcurrentSkipListMap<String, Object> table;
+        public ValueEntry(Object value, boolean isTombstone, long sequenceNumber) {
+            this.value = value;
+            this.isTombstone = isTombstone;
+            this.sequenceNumber = sequenceNumber;
+        }
+
+        public Object getValue() {
+            return value;
+        }
+
+        public boolean isTombstone() {
+            return isTombstone;
+        }
+
+        public long getSequenceNumber() {
+            return sequenceNumber;
+        }
+    }
+
+    // Maps: userKey -> (sequenceNumber DESC -> ValueEntry) for MVCC multi-versioning
+    private final ConcurrentSkipListMap<String, NavigableMap<Long, ValueEntry>> table;
 
     public MemTable() {
         this.table = new ConcurrentSkipListMap<>();
     }
 
-    public void put(String key, Object value) {
-        if (value == null) {
-            table.put(key, TOMBSTONE_SENTINEL);
-        } else {
-            table.put(key, value);
-        }
+    public synchronized void put(String key, Object value, long sequenceNumber) {
+        boolean isTombstone = (value == null);
+        table.computeIfAbsent(key, k -> new TreeMap<>(Collections.reverseOrder()))
+             .put(sequenceNumber, new ValueEntry(value, isTombstone, sequenceNumber));
     }
 
-    public Object get(String key) {
-        Object val = table.get(key);
-        if (val == TOMBSTONE_SENTINEL) {
+    public synchronized void put(String key, Object value) {
+        put(key, value, System.currentTimeMillis() / 1000);
+    }
+
+    public synchronized Object get(String key) {
+        return get(key, Long.MAX_VALUE);
+    }
+
+    public synchronized ValueEntry getEntry(String key, long maxSequenceNumber) {
+        NavigableMap<Long, ValueEntry> versions = table.get(key);
+        if (versions == null) {
             return null;
         }
-        return val;
-    }
-
-    public boolean isTombstone(String key) {
-        return table.get(key) == TOMBSTONE_SENTINEL;
-    }
-
-    public void delete(String key) {
-        table.put(key, TOMBSTONE_SENTINEL);
-    }
-
-    public boolean containsKey(String key) {
-        return table.containsKey(key);
-    }
-
-    public Set<String> keys() {
-        return table.keySet();
-    }
-
-    public int size() {
-        int count = 0;
-        for (Object val : table.values()) {
-            if (val != TOMBSTONE_SENTINEL) {
-                count++;
+        // Find the newest version <= maxSequenceNumber
+        for (Map.Entry<Long, ValueEntry> entry : versions.entrySet()) {
+            if (entry.getKey() <= maxSequenceNumber) {
+                return entry.getValue();
             }
         }
-        return count;
+        return null;
     }
 
-    /**
-     * Returns a sorted map of all entries, mapping tombstones to null.
-     */
-    public Map<String, Object> getEntries() {
-        Map<String, Object> copy = new TreeMap<>();
-        for (Map.Entry<String, Object> entry : table.entrySet()) {
-            copy.put(entry.getKey(), entry.getValue() == TOMBSTONE_SENTINEL ? null : entry.getValue());
+    public synchronized Object get(String key, long maxSequenceNumber) {
+        ValueEntry entry = getEntry(key, maxSequenceNumber);
+        if (entry == null || entry.isTombstone()) {
+            return null;
         }
-        return copy;
+        return entry.getValue();
     }
 
-    public void clear() {
+    public synchronized boolean isTombstone(String key) {
+        ValueEntry entry = getEntry(key, Long.MAX_VALUE);
+        return entry != null && entry.isTombstone();
+    }
+
+    public synchronized boolean containsKey(String key) {
+        return containsKey(key, Long.MAX_VALUE);
+    }
+
+    public synchronized boolean containsKey(String key, long maxSequenceNumber) {
+        return getEntry(key, maxSequenceNumber) != null;
+    }
+
+    public synchronized void delete(String key, long sequenceNumber) {
+        put(key, null, sequenceNumber);
+    }
+
+    public synchronized void delete(String key) {
+        delete(key, System.currentTimeMillis() / 1000);
+    }
+
+    public synchronized Set<String> keys() {
+        Set<String> activeKeys = new TreeSet<>();
+        for (Map.Entry<String, NavigableMap<Long, ValueEntry>> entry : table.entrySet()) {
+            ValueEntry latest = entry.getValue().firstEntry() != null ? entry.getValue().firstEntry().getValue() : null;
+            if (latest != null && !latest.isTombstone()) {
+                activeKeys.add(entry.getKey());
+            }
+        }
+        return activeKeys;
+    }
+
+    public synchronized int size() {
+        return keys().size();
+    }
+
+    public synchronized Map<String, Object> getEntries() {
+        Map<String, Object> latestEntries = new TreeMap<>();
+        for (Map.Entry<String, NavigableMap<Long, ValueEntry>> entry : table.entrySet()) {
+            ValueEntry latest = entry.getValue().firstEntry() != null ? entry.getValue().firstEntry().getValue() : null;
+            if (latest != null) {
+                latestEntries.put(entry.getKey(), latest.isTombstone() ? null : latest.getValue());
+            }
+        }
+        return latestEntries;
+    }
+
+    public synchronized List<sstable.SSTableEntry> getLatestSSTableEntries() {
+        List<sstable.SSTableEntry> entries = new ArrayList<>();
+        for (Map.Entry<String, NavigableMap<Long, ValueEntry>> entry : table.entrySet()) {
+            ValueEntry latest = entry.getValue().firstEntry() != null ? entry.getValue().firstEntry().getValue() : null;
+            if (latest != null) {
+                entries.add(new sstable.SSTableEntry(entry.getKey(), latest.getValue(), latest.isTombstone(), latest.getSequenceNumber()));
+            }
+        }
+        return entries;
+    }
+
+    public synchronized void clear() {
         table.clear();
     }
 }

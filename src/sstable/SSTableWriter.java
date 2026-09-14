@@ -7,6 +7,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class SSTableWriter {
@@ -22,6 +24,23 @@ public class SSTableWriter {
             return;
         }
 
+        List<SSTableEntry> entries = new ArrayList<>();
+        long defaultEpoch = System.currentTimeMillis() / 1000;
+        for (Map.Entry<String, Object> e : sortedEntries.entrySet()) {
+            entries.add(new SSTableEntry(e.getKey(), e.getValue(), e.getValue() == null, defaultEpoch));
+        }
+        writeEntries(basePath, entries, targetBlockSizeBytes);
+    }
+
+    public static void writeEntries(String basePath, List<SSTableEntry> entries) throws IOException {
+        writeEntries(basePath, entries, DEFAULT_BLOCK_SIZE_BYTES);
+    }
+
+    public static void writeEntries(String basePath, List<SSTableEntry> entries, int targetBlockSizeBytes) throws IOException {
+        if (entries == null || entries.isEmpty()) {
+            return;
+        }
+
         File dataFile = new File(basePath + ".sb");
         File indexFile = new File(basePath + ".idx");
         File filterFile = new File(basePath + ".bf");
@@ -32,7 +51,7 @@ public class SSTableWriter {
             parent.mkdirs();
         }
 
-        BloomFilter bloomFilter = new BloomFilter(sortedEntries.size(), 0.01);
+        BloomFilter bloomFilter = new BloomFilter(entries.size(), 0.01);
         BlockIndex blockIndex = new BlockIndex();
         Serializer serializer = new Serializer();
 
@@ -43,9 +62,10 @@ public class SSTableWriter {
             int currentBlockBytes = 0;
             boolean isNewBlock = true;
 
-            for (Map.Entry<String, Object> entry : sortedEntries.entrySet()) {
+            for (SSTableEntry entry : entries) {
                 String key = entry.getKey();
                 Object value = entry.getValue();
+                long epoch = entry.getEpoch();
 
                 // 1. Add key to Bloom Filter
                 bloomFilter.add(key);
@@ -56,8 +76,7 @@ public class SSTableWriter {
                     isNewBlock = false;
                 }
 
-                // 3. Serialize key-value record
-                long epoch = System.currentTimeMillis() / 1000;
+                // 3. Serialize key-value record with original epoch/seq
                 SerializedData serialized = serializer.serialize(epoch, key, value);
                 byte[] recordBytes = serialized.getData();
 

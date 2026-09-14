@@ -87,6 +87,31 @@ public class Level {
     }
 
     /**
+     * Snapshot-aware lookup within this level.
+     */
+    public synchronized SSTableEntry get(String key, long maxSequenceNumber) throws IOException {
+        if (tables.isEmpty()) {
+            return null;
+        }
+
+        if (levelNumber == 0) {
+            for (SSTableReader table : tables) {
+                SSTableEntry entry = table.get(key, maxSequenceNumber);
+                if (entry != null) {
+                    return entry;
+                }
+            }
+        } else {
+            SSTableReader targetTable = findCandidateTable(key);
+            if (targetTable != null) {
+                return targetTable.get(key, maxSequenceNumber);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Binary search to find the single SSTable whose [minKey, maxKey] range covers the key.
      */
     private SSTableReader findCandidateTable(String key) {

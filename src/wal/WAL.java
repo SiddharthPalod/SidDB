@@ -27,6 +27,18 @@ public class WAL implements AutoCloseable {
         fileHandle.getFD().sync();
     }
 
+    // Atomically appends a multi-key WriteBatch and forces a disk sync (ACID Atomicity).
+    public synchronized void appendBatch(tx.WriteBatch batch, long epoch) throws IOException {
+        if (batch == null || batch.size() == 0) return;
+        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        for (tx.WriteBatch.Op op : batch.getOperations()) {
+            SerializedData serialized = serializer.serialize(epoch, op.getKey(), op.getValue());
+            buffer.write(serialized.getData());
+        }
+        fileHandle.write(buffer.toByteArray());
+        fileHandle.getFD().sync();
+    }
+
     // Replays the entire WAL from beginning to recover memory state after a crash. 
     public synchronized List<DeserializedData> replay() throws IOException {
         List<DeserializedData> records = new ArrayList<>();

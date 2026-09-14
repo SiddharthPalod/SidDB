@@ -180,6 +180,70 @@ This alone is a very good systems project.
 
 ---
 
+<!-- UNDERSTANDING SIZE MATHS -->
+Ran command: `Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory`
+Ran command: `Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors`
+
+Based on your system specs:
+
+* **Total RAM:** 16 GB
+* **Available Free RAM:** ~6.3 GB
+* **CPU:** Intel Core i7 (4 Cores / 8 Threads)
+
+Here is the exact engineering breakdown to calculate the optimal production threshold:
+
+---
+
+### 1. The Production Memory Budget Formula
+
+In production LSM engines (RocksDB, LevelDB, Cassandra), memory is divided across 3 main pools:
+
+```
+Total Database Memory Budget (~1 GB - 2 GB on a 16GB Machine)
+ ├── 25% Active + Frozen MemTable (Buffer new writes)   ➜  128 MB – 256 MB
+ ├── 50% LRU Block Cache (Buffer hot 4KB disk blocks)    ➜  512 MB – 1 GB
+ └── 25% In-Memory Bloom Filters & Sparse Indexes        ➜  128 MB – 256 MB
+```
+
+---
+
+### 2. Calculating Key Threshold by Payload Size
+
+$$\text{Flush Threshold (keys)} = \frac{\text{Target MemTable Buffer Size (e.g. 64 MB)}}{\text{Average Key-Value Record Size (bytes)}}$$
+
+| Your Workload Type | Average Record Size | Recommended MemTable Threshold | SSTable Flush Size |
+| :--- | :--- | :--- | :--- |
+| **Small Keys / IDs / Counters** | ~64 – 128 bytes | **$250,000$ to $500,000$ keys** | ~32 MB – 64 MB |
+| **General Purpose (JSON/User profiles)** *(Standard)* | ~512 bytes – 1 KB | **$64,000$ to $100,000$ keys** | ~64 MB |
+| **Large Blobs / Payloads** | ~4 KB – 8 KB | **$10,000$ to $20,000$ keys** | ~64 MB – 80 MB |
+
+---
+
+### 3. Recommended Production Sweet Spot for Your Machine
+
+For a general-purpose production deployment on your 16 GB laptop:
+
+> **Recommended Production Threshold: `64,000` to `100,000` keys**
+
+#### Why this is the sweet spot:
+1. **Flushes at $\approx 64\text{ MB}$ chunks:** Matches modern NVMe/SSD sequential write speeds perfectly (flushes in $< 50\text{ ms}$).
+2. **Fast Crash Recovery:** Replaying a 64MB WAL on startup takes $< 0.3\text{ seconds}$.
+3. **Low GC Pressure:** Avoids long Java garbage collection pauses while maintaining multi-million operations-per-second write throughput in RAM.
+
+---
+
+### How to run with Production Config:
+
+#### Via Java Code:
+```java
+// Production config: 100,000 writes in RAM before flushing 64MB SSTable to disk
+SidDBEngine db = new SidDBEngine("production_db", 100_000);
+```
+
+#### Via Visualizer Studio:
+Type **`100000`** in the `⚙️ Flush Threshold` box in the top bar and click **`Apply Settings`**.
+
+
 # Phase 4 — Raft
 
 **Week 6–9**

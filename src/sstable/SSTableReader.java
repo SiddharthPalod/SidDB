@@ -18,8 +18,9 @@ public class SSTableReader implements AutoCloseable {
     private final Serializer serializer;
     private final String minKey;
     private final String maxKey;
+    private final BlockCache blockCache;
 
-    private SSTableReader(String basePath, BloomFilter bloomFilter, BlockIndex blockIndex, RandomAccessFile dataFile, String minKey, String maxKey) {
+    private SSTableReader(String basePath, BloomFilter bloomFilter, BlockIndex blockIndex, RandomAccessFile dataFile, String minKey, String maxKey, BlockCache blockCache) {
         this.basePath = basePath;
         this.bloomFilter = bloomFilter;
         this.blockIndex = blockIndex;
@@ -27,9 +28,14 @@ public class SSTableReader implements AutoCloseable {
         this.serializer = new Serializer();
         this.minKey = minKey;
         this.maxKey = maxKey;
+        this.blockCache = blockCache;
     }
 
     public static SSTableReader open(String basePath) throws IOException {
+        return open(basePath, null);
+    }
+
+    public static SSTableReader open(String basePath, BlockCache blockCache) throws IOException {
         File dataFile = new File(basePath + ".sb");
         File indexFile = new File(basePath + ".idx");
         File filterFile = new File(basePath + ".bf");
@@ -47,7 +53,7 @@ public class SSTableReader implements AutoCloseable {
 
         if (blockIndex.size() > 0) {
             minKey = blockIndex.getEntries().get(0).getFirstKey();
-            // To get accurate maxKey, read last record or approximate from last block
+            // To get accurate maxKey, read last record from last block
             Serializer tempSerializer = new Serializer();
             long lastBlockOffset = blockIndex.getEntries().get(blockIndex.size() - 1).getFileOffset();
             raf.seek(lastBlockOffset);
@@ -58,12 +64,11 @@ public class SSTableReader implements AutoCloseable {
             }
         }
 
-        return new SSTableReader(basePath, bloomFilter, blockIndex, raf, minKey, maxKey);
+        return new SSTableReader(basePath, bloomFilter, blockIndex, raf, minKey, maxKey, blockCache);
     }
 
     /**
-     * Point lookup using Bloom Filter -> Sparse Index -> Block Scan.
-     * Returns SSTableEntry if found (including tombstones), or null if key is not present.
+     * Point lookup using Bloom Filter -> Sparse Index -> LRU Block Cache -> Disk Block Scan.
      */
     public synchronized SSTableEntry get(String key) throws IOException {
         // 1. Boundary check
@@ -84,30 +89,76 @@ public class SSTableReader implements AutoCloseable {
             return null;
         }
 
-        // 4. Seek to disk block and scan sorted records
-        dataFile.seek(candidate.getFileOffset());
+        long blockOffset = candidate.getFileOffset();
 
-        while (true) {
+        // 4. Check LRU Block Cache (0 Disk I/O on hit!)
+        List<SSTableEntry> cachedBlock = null;
+        if (blockCache != null) {
+            cachedBlock = blockCache.get(basePath, blockOffset);
+        }
+
+        if (cachedBlock != null) {
+            // CACHE HIT: Scan in-memory cached entries
+            for (SSTableEntry entry : cachedBlock) {
+                int cmp = entry.getKey().compareTo(key);
+                if (cmp == 0) {
+                    return entry;
+                }
+                if (cmp > 0) {
+                    break;
+                }
+            }
+            return null;
+        }
+
+        // 5. CACHE MISS: Seek to disk block and read entries
+        List<SSTableEntry> blockEntries = new ArrayList<>();
+        dataFile.seek(blockOffset);
+
+        long nextBlockOffset = Long.MAX_VALUE;
+        for (int i = 0; i < blockIndex.size(); i++) {
+            if (blockIndex.getEntries().get(i).getFileOffset() == blockOffset && i + 1 < blockIndex.size()) {
+                nextBlockOffset = blockIndex.getEntries().get(i + 1).getFileOffset();
+                break;
+            }
+        }
+
+        SSTableEntry matchedEntry = null;
+
+        while (dataFile.getFilePointer() < nextBlockOffset) {
             DeserializedData data = serializer.readNext(dataFile);
             if (data == null) {
                 break;
             }
 
-            String recordKey = data.getKey().toString();
-            int cmp = recordKey.compareTo(key);
+            boolean isTombstone = (data.getValue() == null);
+            SSTableEntry entry = new SSTableEntry(data.getKey().toString(), data.getValue(), isTombstone, data.getEpoch());
+            blockEntries.add(entry);
 
-            if (cmp == 0) {
-                // Key found! (value is null if it's a tombstone)
-                boolean isTombstone = (data.getValue() == null);
-                return new SSTableEntry(recordKey, data.getValue(), isTombstone, data.getEpoch());
-            }
-
-            if (cmp > 0) {
-                // Passed the key in sorted order - key definitely does not exist
-                break;
+            if (matchedEntry == null) {
+                int cmp = entry.getKey().compareTo(key);
+                if (cmp == 0) {
+                    matchedEntry = entry;
+                }
             }
         }
 
+        // Populate LRU Block Cache
+        if (blockCache != null && !blockEntries.isEmpty()) {
+            blockCache.put(basePath, blockOffset, blockEntries);
+        }
+
+        return matchedEntry;
+    }
+
+    /**
+     * Point lookup with Snapshot Isolation: ignores versions created after maxSequenceNumber.
+     */
+    public synchronized SSTableEntry get(String key, long maxSequenceNumber) throws IOException {
+        SSTableEntry entry = get(key);
+        if (entry != null && entry.getEpoch() <= maxSequenceNumber) {
+            return entry;
+        }
         return null;
     }
 
@@ -148,6 +199,10 @@ public class SSTableReader implements AutoCloseable {
 
     public BlockIndex getBlockIndex() {
         return blockIndex;
+    }
+
+    public BlockCache getBlockCache() {
+        return blockCache;
     }
 
     @Override
