@@ -232,6 +232,7 @@ For a general-purpose production deployment on your 16 GB laptop:
 
 ---
 
+# Phase 4 - Visualizer
 ### How to run with Production Config:
 
 #### Via Java Code:
@@ -244,7 +245,8 @@ SidDBEngine db = new SidDBEngine("production_db", 100_000);
 Type **`100000`** in the `⚙️ Flush Threshold` box in the top bar and click **`Apply Settings`**.
 
 
-# Phase 4 — Raft
+
+# Phase 5 — Raft
 
 **Week 6–9**
 
@@ -294,7 +296,7 @@ Implement:
 
 ---
 
-# Phase 5 — Network failures
+# Phase 6 — Network failures
 
 **Week 10–11**
 
@@ -334,7 +336,7 @@ Verify consistency.
 
 ---
 
-# Phase 6 — Benchmarking
+# Phase 7 — Benchmarking
 
 **Week 12–14**
 
@@ -356,7 +358,3 @@ Compare:
 3 nodes
 5 nodes
 ```
-
-Now you have **systems research material**, not just code.
-
----

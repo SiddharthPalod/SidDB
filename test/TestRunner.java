@@ -32,6 +32,8 @@ public class TestRunner {
         testSuites.add(new TestEntry("Phase 5: Real TCP Socket Transport Test", SocketTransportTest::run));
         testSuites.add(new TestEntry("Phase 5: Raft Disk Persistence & Crash Recovery Test", Phase5RaftCrashRecoveryTest::run));
         testSuites.add(new TestEntry("Phase 5: Multi-Process Real TCP Cluster Demo", MultiProcessClusterDemo::run));
+        testSuites.add(new TestEntry("Phase 6: Network Failures & Chaos Testing Suite (In-Memory)", Phase6NetworkFailuresTest::run));
+        testSuites.add(new TestEntry("Phase 6: Real TCP Sockets Chaos Injection Test", TcpChaosTest::run));
 
         System.out.println("=================================================");
         System.out.println("          SidDB Regression Test Suite            ");

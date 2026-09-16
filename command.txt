@@ -1,16 +1,17 @@
 
 Compilation
-javac -d out -sourcepath "src;test" src/store/*.java src/serializer/*.java src/memtable/*.java src/engine/*.java test/*.java
+javac -d out (Get-ChildItem -Recurse -Include *.java src,test | ForEach-Object { $_.FullName })
 
 Test
 javac -d out -sourcepath src src/Main.java
 java -cp out Main
 
-javac -d out -sourcepath "src;test" src/store/*.java src/serializer/*.java src/memtable/*.java src/engine/*.java test/*.java
+javac -d out (Get-ChildItem -Recurse -Include *.java src,test | ForEach-Object { $_.FullName })
 java -cp out test.TestRunner
 
 SidDB live server
 java -cp out server.SidDBServer
+java -cp out server.SidDBServer 8081
 
 # Test Multi-Process Real TCP Cluster (Different port rather than threads in live server)
 Compile

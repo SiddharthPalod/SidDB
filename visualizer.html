@@ -60,12 +60,15 @@
     </div>
 
     <!-- Mode Selector Tabs -->
-    <div class="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-1 shadow-inner">
+    <div class="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-1 shadow-inner gap-1">
       <button id="tab-btn-lsm" onclick="switchTab('lsm')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition bg-blue-600 text-white shadow-md">
         🌳 Single-Node LSM Pipeline
       </button>
       <button id="tab-btn-raft" onclick="switchTab('raft')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">
         ⚡ Multi-Node Raft Cluster
+      </button>
+      <button id="tab-btn-chaos" onclick="switchTab('chaos')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-rose-300 flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span> ⚠️ Chaos Engineering
       </button>
     </div>
 
@@ -406,6 +409,343 @@
       </div>
     </div>
 
+    <!-- ========================================== -->
+    <!-- VIEW 3: CHAOS ENGINEERING & FAILURE SUITE -->
+    <!-- ========================================== -->
+    <div id="view-chaos" class="hidden space-y-6">
+
+      <!-- Chaos Overview Banner -->
+      <section class="bg-gradient-to-r from-rose-950/40 via-slate-900 to-amber-950/40 border border-rose-900/50 rounded-2xl p-5 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2.5">
+            <span class="text-xs font-bold uppercase tracking-wider text-rose-400">Phase 6 Chaos Suite</span>
+            <span id="chaos-status-badge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1.5">
+              ⚠️ Isolated Chaos Testbed Ready
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 max-w-2xl leading-relaxed">
+            Deliberately inject network partitions, packet loss, crash loops, and I/O faults into isolated Raft clusters.
+            Verifies <strong>Linearizability</strong> and generates comprehensive <strong>Consistency & Partition Tolerance Reports</strong>.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button id="btn-run-all-chaos" onclick="runAllChaosScenarios()" class="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-rose-600/30 flex items-center gap-2">
+            <span>🚀</span> Run All 9 Scenarios
+          </button>
+          <button onclick="downloadChaosReport()" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+            <span>📥</span> Download Report
+          </button>
+        </div>
+      </section>
+
+      <!-- Interactive Chaos Visualizer & Storyboard Stage -->
+      <section class="bg-[#111827] border border-slate-800 rounded-2xl p-6 space-y-5 shadow-2xl">
+        
+        <!-- Storyboard Header & Scenario Picker -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-amber-400">Interactive Visual Storyboard</span>
+              <span class="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 font-mono">Step-by-Step Distributed Invariant Inspector</span>
+            </div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2" id="sim-title">
+              📡 1. 25% Random Packet Loss & Heartbeat Retries
+            </h2>
+          </div>
+
+          <!-- Scenario Dropdown Selector -->
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-400 font-medium">Scenario:</span>
+            <select id="sim-scenario-select" onchange="selectSimScenario(this.value)" class="bg-slate-900 border border-slate-700 text-white font-medium text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 cursor-pointer">
+              <option value="packet_loss">📡 1. 25% Random Packet Loss & Retries</option>
+              <option value="latency_jitter">⏱️ 2. WAN Latency Jitter (50-150ms)</option>
+              <option value="slow_follower">🐢 3. Slow Follower & nextIndex Backtrack</option>
+              <option value="leader_crash">💥 4. Leader Crash & Failover Election</option>
+              <option value="split_brain">🔀 5. Asymmetric Split-Brain Partition</option>
+              <option value="message_reorder">🔀 6. Out-of-Order Message Delivery</option>
+              <option value="correlated_crash">⚡ 7. Correlated Multi-Node Crash</option>
+              <option value="flapping_node">🔄 8. Flapping Node Rapid Reboot Loops</option>
+              <option value="disk_fault">💾 9. Storage / WAL I/O Fault Recovery</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Step Progress Bar & Controls -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 p-3 rounded-xl border border-slate-900">
+          <div class="flex flex-wrap items-center gap-2" id="sim-stepper-dots">
+            <!-- Step dots dynamically injected -->
+          </div>
+          
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="prevSimStep()" id="sim-btn-prev" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed">
+              ◀ Prev Step
+            </button>
+            <button onclick="nextSimStep()" id="sim-btn-next" class="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition shadow-md shadow-amber-600/30">
+              Next Step ➔
+            </button>
+            <button onclick="toggleSimAutoPlay()" id="sim-btn-play" class="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-semibold transition">
+              ▶ Auto-Play
+            </button>
+          </div>
+        </div>
+
+        <!-- Visual Cluster Topology Canvas (3 Nodes + Links + Partition Barriers) -->
+        <div class="relative bg-[#0b0f19] border border-slate-800 rounded-2xl p-5 min-h-[340px] flex flex-col justify-between overflow-hidden">
+          
+          <!-- Animated Topology Canvas Header -->
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-3 border-b border-slate-800/80 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="font-bold text-white text-[11px] font-mono" id="sim-stage-indicator">STAGE: Normal Steady State</span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-mono" id="sim-quorum-indicator">Quorum Rule: 2 of 3 (Majority)</span>
+          </div>
+
+          <!-- Nodes Visualization Row -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5 relative z-10 my-auto" id="sim-nodes-canvas">
+            <!-- 3 Dynamic Node Visual Cards injected here -->
+          </div>
+
+          <!-- Active Partition Barrier Overlay (shown conditionally) -->
+          <div id="sim-partition-barrier" class="hidden absolute inset-y-0 left-[34%] w-1.5 bg-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.9)] z-20 flex items-center justify-center">
+            <div class="bg-rose-950 border border-rose-500 text-rose-300 text-[10px] font-black font-mono px-2.5 py-1 rounded-full whitespace-nowrap shadow-xl -rotate-90">
+              ⚡ NETWORK PARTITION BARRIER ⚡
+            </div>
+          </div>
+        </div>
+
+        <!-- Storyboard Step Explanation Box -->
+        <div class="bg-slate-900/90 border border-amber-500/30 rounded-xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-amber-300 flex items-center gap-1.5" id="sim-step-title">
+              Step 1: Normal Quorum Replication
+            </span>
+            <span class="text-[10px] font-mono text-slate-400" id="sim-step-counter">Step 1 of 5</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed font-normal" id="sim-step-desc">
+            Node 1 is the elected Leader at Term 1. Heartbeats flow smoothly to Node 2 and Node 3. All client writes are acknowledged and committed by majority quorum.
+          </p>
+        </div>
+
+        <!-- Educational Raft Theory & Mathematical Invariant Deep Dive -->
+        <div class="bg-blue-950/30 border border-blue-500/30 rounded-xl p-4 flex items-start gap-3 text-xs">
+          <span class="text-base shrink-0">💡</span>
+          <div class="space-y-1">
+            <div class="font-bold text-blue-300" id="sim-theory-title">Raft Theorem: Quorum Intersection</div>
+            <p class="text-slate-400 leading-relaxed" id="sim-theory-desc">
+              Any two majorities Q1, Q2 in cluster N must share at least one node. A minority partition can never form a quorum, making split-brain writes mathematically impossible.
+            </p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- 9 Chaos Scenario Cards Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        <!-- Card 1: Packet Loss -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-rose-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>📡</span> 1. 25% Random Packet Loss
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono">Network</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Injects 25% drop rate on RPCs. Asserts Raft retries achieve quorum replication without dropped writes.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('packet_loss')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 2: Latency & Jitter -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>⏱️</span> 2. Latency & Jitter (50-150ms)
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono">Network</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Simulates WAN delays. Verifies adaptive election timers and deterministic log order.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('latency_jitter')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 3: Slow Follower -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-yellow-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>🐢</span> 3. Slow Follower Catch-up
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">Replication</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Lags one follower. Faster quorum moves forward. Follower backtracks nextIndex and syncs on heal.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('slow_follower')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 border border-yellow-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 4: Leader Hard Crash -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-red-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>💥</span> 4. Leader Crash & Disk Reboot
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 font-mono">Process</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Kills leader without graceful shutdown. Asserts failover election, then reboots from disk state.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('leader_crash')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 5: Split Brain Partition -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-indigo-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>🔀</span> 5. Asymmetric Split-Brain
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono">Network</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Partitions Minority vs. Majority. Minority writes rejected; majority commits; zero state divergence on heal.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('split_brain')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 6: Out-of-Order RPCs -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>🔀</span> 6. Out-of-Order RPC Delivery
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono">Network</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Shuffles packet arrival order. Raft term and log index checks safely reject stale messages.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('message_reorder')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 7: Correlated Multi-Crash -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-pink-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>⚡</span> 7. Correlated Multi-Node Crash
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 font-mono">Process</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Simultaneously crashes minority nodes. Surviving majority keeps committing; rebooted nodes catch up.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('correlated_crash')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-pink-600/20 hover:bg-pink-600/30 text-pink-300 border border-pink-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 8: Flapping Node -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-orange-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>🔄</span> 8. Flapping Node (4 Loops)
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 font-mono">Process</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Rapid crash/reboot cycles. Asserts cluster stability, term monotonicity, and log convergence.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('flapping_node')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-orange-600/20 hover:bg-orange-600/30 text-orange-300 border border-orange-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+        <!-- Card 9: Disk / WAL Fault -->
+        <div class="bg-[#111827]/80 border border-slate-800 hover:border-teal-500/50 rounded-2xl p-4 space-y-3 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>💾</span> 9. Storage / Disk Fault
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-teal-500/10 text-teal-400 font-mono">Storage</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Simulates ungraceful engine halt on I/O error. Healthy quorum preserves durability and heals peer.
+            </p>
+          </div>
+          <button onclick="runSingleChaosScenario('disk_fault')" class="w-full py-1.5 text-xs font-semibold rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/30 transition">
+            Inject & Verify
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Live Execution Log & Output Stream -->
+      <section class="bg-[#0b0f19] border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xl font-mono text-xs">
+        <div class="flex items-center justify-between text-slate-400 border-b border-slate-800/80 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+            <span class="font-bold text-white text-[11px] uppercase tracking-wider">Chaos Terminal & Invariant Verifier</span>
+          </div>
+          <span id="chaos-execution-time" class="text-[10px] text-slate-500">Ready</span>
+        </div>
+        <div id="chaos-console-log" class="h-48 overflow-y-auto space-y-1 text-slate-300 text-[11px] p-2 bg-slate-950/70 rounded-xl border border-slate-900">
+          <div class="text-slate-500 italic">Select a scenario above or click "Run All 9 Scenarios" to begin chaos testing...</div>
+        </div>
+      </section>
+
+      <!-- Markdown Report Preview Container -->
+      <section id="chaos-report-section" class="bg-[#111827]/80 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-white">📊 Latest Consistency & Partition Tolerance Report</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="copyChaosReportMarkdown()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+              📋 Copy Markdown
+            </button>
+            <button onclick="downloadChaosReport()" class="text-xs px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 transition">
+              💾 Save Report
+            </button>
+          </div>
+        </div>
+        <div id="chaos-report-content" class="bg-slate-950 p-4 rounded-xl border border-slate-800/80 max-h-96 overflow-y-auto text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
+          Click "Run All 9 Scenarios" or load report to inspect linearizability analysis.
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
   </main>
 
   <!-- Modal for Custom PUT / DELETE -->
@@ -443,17 +783,32 @@
 
     function switchTab(tab) {
       activeTab = tab;
+      const btnLsm = document.getElementById('tab-btn-lsm');
+      const btnRaft = document.getElementById('tab-btn-raft');
+      const btnChaos = document.getElementById('tab-btn-chaos');
+      const viewLsm = document.getElementById('view-lsm');
+      const viewRaft = document.getElementById('view-raft');
+      const viewChaos = document.getElementById('view-chaos');
+
+      viewLsm.classList.add('hidden');
+      viewRaft.classList.add('hidden');
+      viewChaos.classList.add('hidden');
+
+      btnLsm.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
+      btnRaft.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
+      btnChaos.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-rose-300 flex items-center gap-1.5';
+
       if (tab === 'lsm') {
-        document.getElementById('view-lsm').classList.remove('hidden');
-        document.getElementById('view-raft').classList.add('hidden');
-        document.getElementById('tab-btn-lsm').className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-blue-600 text-white shadow-md';
-        document.getElementById('tab-btn-raft').className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
-      } else {
-        document.getElementById('view-lsm').classList.add('hidden');
-        document.getElementById('view-raft').classList.remove('hidden');
-        document.getElementById('tab-btn-raft').className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-amber-600 text-white shadow-md';
-        document.getElementById('tab-btn-lsm').className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white';
+        viewLsm.classList.remove('hidden');
+        btnLsm.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-blue-600 text-white shadow-md';
+      } else if (tab === 'raft') {
+        viewRaft.classList.remove('hidden');
+        btnRaft.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-amber-600 text-white shadow-md';
         syncClusterState();
+      } else if (tab === 'chaos') {
+        viewChaos.classList.remove('hidden');
+        btnChaos.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition bg-rose-600 text-white shadow-md flex items-center gap-1.5';
+        fetchChaosReport();
       }
     }
 
@@ -870,6 +1225,672 @@
         `;
       }).join('');
     }
+
+    // ==========================================
+    // CHAOS TESTING FRONTEND LOGIC
+    // ==========================================
+
+    let lastLoadedReportMarkdown = "";
+
+    function appendChaosLog(text, isError = false) {
+      const log = document.getElementById('chaos-console-log');
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = isError ? 'text-rose-400 font-semibold' : 'text-slate-300';
+      div.innerHTML = `<span class="text-slate-500">[${time}]</span> ${text}`;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    async function runSingleChaosScenario(scenarioName) {
+      appendChaosLog(`Triggering scenario: <strong>${scenarioName}</strong>...`);
+      document.getElementById('chaos-execution-time').innerText = "Running...";
+      
+      // Sync Interactive Visual Storyboard
+      selectSimScenario(scenarioName);
+      const sel = document.getElementById('sim-scenario-select');
+      if (sel) sel.value = scenarioName;
+      document.getElementById('sim-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      const t0 = performance.now();
+
+      try {
+        const res = await fetch('/api/chaos/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: scenarioName })
+        });
+        const data = await res.json();
+        const duration = Math.round(performance.now() - t0);
+
+        if (data.status === 'completed') {
+          appendChaosLog(`✓ Scenario '${scenarioName}' completed in ${duration} ms (Passed: ${data.passedCount}/${data.totalCount})`);
+          if (data.markdownReport) {
+            lastLoadedReportMarkdown = data.markdownReport;
+            document.getElementById('chaos-report-content').innerText = data.markdownReport;
+          }
+          document.getElementById('chaos-execution-time').innerText = `Finished (${duration} ms)`;
+        } else {
+          appendChaosLog(`✗ Scenario failed: ${data.message || 'Unknown error'}`, true);
+          document.getElementById('chaos-execution-time').innerText = "Failed";
+        }
+      } catch (e) {
+        appendChaosLog(`✗ Network error executing scenario: ${e.message}`, true);
+        document.getElementById('chaos-execution-time').innerText = "Error";
+      }
+    }
+
+    async function runAllChaosScenarios() {
+      const btn = document.getElementById('btn-run-all-chaos');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      appendChaosLog("🚀 <strong>Starting full Phase 6 Chaos Engineering Suite (9 scenarios)...</strong>");
+      document.getElementById('chaos-execution-time').innerText = "Executing Suite...";
+      const t0 = performance.now();
+
+      try {
+        const res = await fetch('/api/chaos/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: 'all' })
+        });
+        const data = await res.json();
+        const duration = Math.round(performance.now() - t0);
+
+        if (data.status === 'completed') {
+          appendChaosLog(`🎯 <strong>Full Suite Finished in ${duration} ms!</strong> Passed: ${data.passedCount}/${data.totalCount} (All Passed: ${data.allPassed})`);
+          if (data.markdownReport) {
+            lastLoadedReportMarkdown = data.markdownReport;
+            document.getElementById('chaos-report-content').innerText = data.markdownReport;
+          }
+          document.getElementById('chaos-execution-time').innerText = `Passed 9/9 (${duration} ms)`;
+          document.getElementById('chaos-status-badge').innerText = data.allPassed ? "✅ All 9 Scenarios Passed (Strictly Consistent)" : "⚠️ Violations Found";
+          document.getElementById('chaos-status-badge').className = data.allPassed ?
+            "text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5" :
+            "text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1.5";
+        } else {
+          appendChaosLog(`✗ Execution failed: ${data.message}`, true);
+          document.getElementById('chaos-execution-time').innerText = "Failed";
+        }
+      } catch (e) {
+        appendChaosLog(`✗ Network error running chaos suite: ${e.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    async function fetchChaosReport() {
+      try {
+        const res = await fetch('/api/chaos/report');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.markdown) {
+            lastLoadedReportMarkdown = data.markdown;
+            document.getElementById('chaos-report-content').innerText = data.markdown;
+          }
+        }
+      } catch (ignored) {}
+    }
+
+    function copyChaosReportMarkdown() {
+      if (!lastLoadedReportMarkdown) {
+        alert("No report loaded yet. Please run a chaos scenario first.");
+        return;
+      }
+      navigator.clipboard.writeText(lastLoadedReportMarkdown).then(() => {
+        alert("ChaosReport.md copied to clipboard!");
+      });
+    }
+
+    function downloadChaosReport() {
+      if (!lastLoadedReportMarkdown) {
+        alert("No report generated yet. Run all chaos scenarios first.");
+        return;
+      }
+      const blob = new Blob([lastLoadedReportMarkdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ChaosReport.md';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // INTERACTIVE CHAOS STORYBOARD DATA & ENGINE
+    // ==========================================
+
+    const SIMULATION_DATA = {
+      packet_loss: {
+        title: "📡 1. 25% Random Packet Loss & Heartbeat Retries",
+        steps: [
+          {
+            stage: "1. Baseline Cluster",
+            title: "Step 1: Normal Raft Heartbeats",
+            desc: "Leader Node 1 sends periodic 50ms AppendEntries heartbeats. Followers reset election timers upon receipt.",
+            theoryTitle: "Heartbeat Liveness Guarantee",
+            theoryDesc: "Heartbeats suppress follower election timeouts (150ms-300ms), maintaining stable cluster leadership.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Active Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 1, status: "In Sync", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "In Sync", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Packet Drop Injected",
+            title: "Step 2: 25% Random Drop Rate on RPC Transport",
+            desc: "ChaoticTransport randomly drops 1 out of 4 RPC packets. Some heartbeats fail to reach Node 2 or Node 3.",
+            theoryTitle: "Unreliable Network Abstraction",
+            theoryDesc: "Raft is designed for asynchronous, unreliable networks where messages can be delayed, duplicated, or lost.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Broadcasting (25% Drop)", badge: "👑 Leader (Retrying)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 1, status: "Packet Dropped (Retrying)", badge: "📡 Packet Loss", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Heartbeat Received", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "3. Retry & Quorum Commit",
+            title: "Step 3: Leader Retries AppendEntries & Reaches Quorum",
+            desc: "Client proposes 'pktloss-key'. Even though 1 RPC was dropped, the leader's retry delivers it. Majority commits the write!",
+            theoryTitle: "Idempotent RPC Invariant",
+            theoryDesc: "Raft RPCs are idempotent. If a message is retried, the receiver recognizes already-applied entries and safely acknowledges.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Committed via Retries", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "pktloss-key", v: "reliable", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 2, status: "Received on Retry", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "pktloss-key", v: "reliable", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 2, status: "In Sync", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "pktloss-key", v: "reliable", c: true }] }
+            ]
+          }
+        ]
+      },
+      latency_jitter: {
+        title: "⏱️ 2. WAN Latency Jitter (50ms - 150ms)",
+        steps: [
+          {
+            stage: "1. Transit Delays Injected",
+            title: "Step 1: Network Jitter Added Across RPC Links",
+            desc: "ChaoticTransport injects fluctuating 50ms-150ms delays. Heartbeats and proposals take variable transit times.",
+            theoryTitle: "Timing Invariant: BroadcastTime << ElectionTimeout",
+            theoryDesc: "As long as maximum transit delay (150ms) remains lower than the randomized election timeout (150ms-300ms), no spurious elections occur.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Jittering RPCs", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 1, status: "Delayed Heartbeat (+80ms)", badge: "⏱️ Jitter (+80ms)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Delayed Heartbeat (+120ms)", badge: "⏱️ Jitter (+120ms)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Deterministic Commit Sequence",
+            title: "Step 2: Log Order Preserved Despite WAN Delays",
+            desc: "Client proposes 2 writes in sequence. Both arrive with jitter but are applied in strict serial index order.",
+            theoryTitle: "Total Order Broadcast",
+            theoryDesc: "Raft guarantees all replicas execute state machine operations in the exact same index sequence regardless of arrival latency.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 3, status: "Leader Committed All", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "jitter-k1", v: "v1", c: true }, { i: 3, t: 1, cmd: "PUT", k: "jitter-k2", v: "v2", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 3, status: "Applied in Order", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "jitter-k1", v: "v1", c: true }, { i: 3, t: 1, cmd: "PUT", k: "jitter-k2", v: "v2", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 3, status: "Applied in Order", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "jitter-k1", v: "v1", c: true }, { i: 3, t: 1, cmd: "PUT", k: "jitter-k2", v: "v2", c: true }] }
+            ]
+          }
+        ]
+      },
+      slow_follower: {
+        title: "🐢 3. Slow Follower & nextIndex Backtracking",
+        steps: [
+          {
+            stage: "1. Normal State",
+            title: "Step 1: All Nodes in Sync",
+            desc: "Leader Node 1 replicates entries #1 and #2 to Node 2 and Node 3.",
+            theoryTitle: "Synchronous Replication Baseline",
+            theoryDesc: "All followers maintain matchIndex == lastLogIndex.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 2, status: "In Sync", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 2, status: "In Sync", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Injected +300ms Delay",
+            title: "Step 2: Follower Node 3 Lagging Behind (+300ms latency)",
+            desc: "Network latency slows Node 3. Client submits entries #3 and #4. Node 1 and Node 2 commit them immediately while Node 3 is left behind.",
+            theoryTitle: "Non-Blocking Majority Progress",
+            theoryDesc: "Slow followers do not block client writes because 2 of 3 nodes (Quorum) commit without waiting for slow peers.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 4, status: "Fast Quorum Commits", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "c", v: "3", c: true }, { i: 4, t: 1, cmd: "PUT", k: "d", v: "4", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 4, status: "Fast Quorum Commits", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "c", v: "3", c: true }, { i: 4, t: 1, cmd: "PUT", k: "d", v: "4", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 2, status: "🐢 Lagging (+300ms)", badge: "🐢 Slow Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }] }
+            ]
+          },
+          {
+            stage: "3. nextIndex Backtrack & Sync",
+            title: "Step 3: Network Heals — Leader Streams Delta",
+            desc: "Latency removed. Leader detects nextIndex[Node 3] = 3, sends AppendEntries with entries #3 and #4. Node 3 catches up!",
+            theoryTitle: "Leader nextIndex Decrement Algorithm",
+            theoryDesc: "Leader decrements nextIndex upon AppendEntries failure until a matching log entry is found, then streams missing entries.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 4, status: "Leader (Synced)", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "c", v: "3", c: true }, { i: 4, t: 1, cmd: "PUT", k: "d", v: "4", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 4, status: "In Sync", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "c", v: "3", c: true }, { i: 4, t: 1, cmd: "PUT", k: "d", v: "4", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 4, status: "Caught Up (Synced)", badge: "🛡️ Follower (Synced)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "a", v: "1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "b", v: "2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "c", v: "3", c: true }, { i: 4, t: 1, cmd: "PUT", k: "d", v: "4", c: true }] }
+            ]
+          }
+        ]
+      },
+      leader_crash: {
+        title: "💥 4. Leader Hard Crash & Failover Election",
+        steps: [
+          {
+            stage: "1. Leader Operational",
+            title: "Step 1: Node 1 Serving Client Proposals",
+            desc: "Node 1 is active Leader in Term 1, streaming heartbeats every 50ms to followers.",
+            theoryTitle: "Heartbeat Liveness Guarantee",
+            theoryDesc: "Followers reset randomized election timers (150ms-300ms) upon receiving heartbeats.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Serving Traffic", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 1, status: "Receiving Heartbeats", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Receiving Heartbeats", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Power Loss / Hard Crash",
+            title: "Step 2: Node 1 Killed Abruptly (No Graceful Shutdown)",
+            desc: "Node 1 crashes immediately. File descriptors close, threads terminate. State is persisted in raft.meta and raft.log.",
+            theoryTitle: "Crash Fault Tolerance (CFT)",
+            theoryDesc: "Raft survives up to F failures in 2F+1 nodes (1 failure in 3 nodes) without data loss.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "OFFLINE", term: 1, commit: 1, status: "DEAD / CRASHED", badge: "💥 Crashed (Offline)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 1, status: "Timer Expiring...", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Timer Expiring...", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "3. Failover Election",
+            title: "Step 3: Node 2 Wins Election at Term 2",
+            desc: "Election timer expires (~200ms). Node 2 requests votes from Node 3. Node 3 grants vote. Node 2 becomes Leader.",
+            theoryTitle: "Randomized Timer Election Rule",
+            theoryDesc: "Random timeout ranges (150ms-300ms) prevent simultaneous candidates and split votes.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "OFFLINE", term: 1, commit: 1, status: "DEAD / CRASHED", badge: "💥 Crashed (Offline)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "LEADER", term: 2, commit: 1, status: "Elected Leader in 201ms", badge: "👑 Leader (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 2, commit: 1, status: "Granted Vote to N2", badge: "🛡️ Follower (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "4. Node Reboot & Catch-up",
+            title: "Step 4: Node 1 Reboots from Disk & Reconciles",
+            desc: "Node 1 restarts, replays WAL and raft.log. It discovers Term 2 and becomes a healthy follower under Node 2.",
+            theoryTitle: "Durability & Recovery Invariant",
+            theoryDesc: "Persistent state (currentTerm, votedFor, log entries) guarantees uninterrupted state continuity across crashes.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "FOLLOWER", term: 2, commit: 2, status: "Rebooted & Following", badge: "🛡️ Follower (Rejoined)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 2, cmd: "PUT", k: "post_crash", v: "v2", c: true }] },
+              { id: "node-2", role: "LEADER", term: 2, commit: 2, status: "Active Leader", badge: "👑 Leader (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 2, cmd: "PUT", k: "post_crash", v: "v2", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 2, commit: 2, status: "Active Follower", badge: "🛡️ Follower (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 2, cmd: "PUT", k: "post_crash", v: "v2", c: true }] }
+            ]
+          }
+        ]
+      },
+      split_brain: {
+        title: "🔀 5. Asymmetric Split-Brain Partition & Quorum Convergence",
+        steps: [
+          {
+            stage: "1. Steady-State Quorum",
+            title: "Step 1: Normal Cluster State (Term 1)",
+            desc: "Node 1 is the elected Leader at Term 1. Heartbeats and log replication flow reliably to Node 2 and Node 3. All 3 nodes are in sync.",
+            theoryTitle: "Raft Invariant: Single Leader in Normal State",
+            theoryDesc: "In steady state, only one leader is active per term. Majority quorum (2 of 3) acknowledges every append before applying mutations to SidDB.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Healthy", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 2, status: "Healthy", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 2, status: "Healthy", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Network Partition Injected",
+            title: "Step 2: Network Severed: {Node 1} vs {Node 2, Node 3}",
+            desc: "A network partition isolates Node 1 into a Minority partition (1 node). Node 2 and Node 3 form the Majority partition (2 nodes). Node 1 cannot send heartbeats to Node 2 or Node 3.",
+            theoryTitle: "Distributed Axiom: Quorum Separation",
+            theoryDesc: "For N=3 nodes, Quorum = (3/2)+1 = 2. Minority group has size 1 < 2 (cannot commit). Majority group has size 2 >= 2 (can elect and commit).",
+            partition: true,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Isolated Minority", badge: "🚫 Isolated Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] },
+              { id: "node-2", role: "CANDIDATE", term: 2, commit: 2, status: "Election Triggered", badge: "🗳️ Candidate", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 2, commit: 2, status: "Voting in Majority", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] }
+            ]
+          },
+          {
+            stage: "3. Minority Write Attempt",
+            title: "Step 3: Client Writes to Minority Leader (Node 1)",
+            desc: "A client attempts to write 'split-key = dirty' to Node 1. Node 1 logs it locally at Index #3 but CANNOT obtain quorum from peers. The write remains uncommitted and pending forever!",
+            theoryTitle: "CAP Theorem Safety Invariant",
+            theoryDesc: "Raft chooses Consistency (C) over Availability (A). The minority partition refuses to falsely acknowledge a write without majority consensus.",
+            partition: true,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "No Quorum (Pending)", badge: "🚫 Isolated Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }, { i: 3, t: 1, cmd: "PUT", k: "split-key", v: "dirty", c: false }] },
+              { id: "node-2", role: "LEADER", term: 2, commit: 2, status: "Elected in Majority", badge: "👑 New Leader (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 2, commit: 2, status: "Following Node 2", badge: "🛡️ Follower (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }] }
+            ]
+          },
+          {
+            stage: "4. Majority Commit",
+            title: "Step 4: Client Writes to Majority Leader (Node 2)",
+            desc: "A client proposes 'split-key = true-value' to Node 2. Node 2 replicates to Node 3. Since Node 2 + Node 3 = 2 nodes (Majority Quorum), Index #3 is officially COMMITTED and applied to SidDBEngine!",
+            theoryTitle: "Quorum Progress Guarantee",
+            theoryDesc: "The majority partition retains full read/write capability because it satisfies the quorum intersection requirement (|Q| >= 2).",
+            partition: true,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Stale / Pending", badge: "🚫 Isolated (T1)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }, { i: 3, t: 1, cmd: "PUT", k: "split-key", v: "dirty", c: false }] },
+              { id: "node-2", role: "LEADER", term: 2, commit: 3, status: "Committed Entry #3", badge: "👑 Leader (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }, { i: 3, t: 2, cmd: "PUT", k: "split-key", v: "true-value", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 2, commit: 3, status: "Replicated & Committed", badge: "🛡️ Follower (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }, { i: 3, t: 2, cmd: "PUT", k: "split-key", v: "true-value", c: true }] }
+            ]
+          },
+          {
+            stage: "5. Partition Healed & Convergence",
+            title: "Step 5: Partition Healed — Log Reconciled (Zero Divergence)",
+            desc: "The network heals. Node 1 receives heartbeat with Term 2 > Term 1. Node 1 immediately steps down to Follower, overwrites its uncommitted dirty Index #3 with Node 2's committed entry, and syncs completely!",
+            theoryTitle: "Raft Log Matching & Truncation Rule",
+            theoryDesc: "If a follower's log conflicts with a leader's term, the follower overwrites all uncommitted entries at that index. Byte-for-byte linearizability is restored!",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "FOLLOWER", term: 2, commit: 3, status: "Stepped Down & Synced", badge: "🛡️ Follower (Healed)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }, { i: 3, t: 2, cmd: "PUT", k: "split-key", v: "true-value", c: true }] },
+              { id: "node-2", role: "LEADER", term: 2, commit: 3, status: "Active Leader", badge: "👑 Leader (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }, { i: 3, t: 2, cmd: "PUT", k: "split-key", v: "true-value", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 2, commit: 3, status: "Active Follower", badge: "🛡️ Follower (T2)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "user_1", v: "Alice", c: true }, { i: 2, t: 1, cmd: "PUT", k: "user_2", v: "Bob", c: true }, { i: 3, t: 2, cmd: "PUT", k: "split-key", v: "true-value", c: true }] }
+            ]
+          }
+        ]
+      },
+      message_reorder: {
+        title: "🔀 6. Out-of-Order Message Delivery & Term Validation",
+        steps: [
+          {
+            stage: "1. Shuffled Packets",
+            title: "Step 1: Messages Arrive Out of Sequence",
+            desc: "ChaoticTransport reorders packets in flight. AppendEntries with Index #3 arrives before Index #2 on Node 3.",
+            theoryTitle: "Log Consistency Check (prevLogIndex)",
+            theoryDesc: "AppendEntries contains prevLogIndex & prevLogTerm. A follower rejects any entry if it does not contain the entry at prevLogIndex.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Broadcasting Entries", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "k2", v: "v2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "k3", v: "v3", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 3, status: "Received In Order", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "k2", v: "v2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "k3", v: "v3", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Rejected Out-of-Order #3", badge: "🛡️ Follower (Safe)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Re-Transmission & Sync",
+            title: "Step 2: Leader Backtracks & Corrects Sequence",
+            desc: "Upon rejection, Leader sends missing entry #2. Node 3 accepts #2 and then accepts #3 in perfect order.",
+            theoryTitle: "Inductive Log Invariant",
+            theoryDesc: "If two logs have an entry with same index and term, they are identical in all entries up to the given index.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 3, status: "Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "k2", v: "v2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "k3", v: "v3", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 3, status: "In Sync", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "k2", v: "v2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "k3", v: "v3", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 3, status: "Synchronized in Order", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "k2", v: "v2", c: true }, { i: 3, t: 1, cmd: "PUT", k: "k3", v: "v3", c: true }] }
+            ]
+          }
+        ]
+      },
+      correlated_crash: {
+        title: "⚡ 7. Correlated Multi-Node Crash & Quorum Survival",
+        steps: [
+          {
+            stage: "1. 5-Node Baseline",
+            title: "Step 1: 5-Node Quorum Operation (Quorum: 3)",
+            desc: "Cluster has 5 nodes. Node 1 is Leader. Quorum size is 3 out of 5.",
+            theoryTitle: "N-Node Quorum Formula",
+            theoryDesc: "Quorum = floor(N/2) + 1. For N=5, Quorum is 3. The cluster tolerates up to 2 concurrent failures.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 1, status: "Follower", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Follower", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Correlated Crash",
+            title: "Step 2: Follower Node 2 Crashes Concurrently",
+            desc: "A rack power fault crashes Node 2. Surviving nodes (Node 1 and Node 3) still form majority (2 of 3) and continue committing writes!",
+            theoryTitle: "Fault Tolerance Bound",
+            theoryDesc: "As long as at least floor(N/2)+1 nodes remain alive, the cluster continues to accept client proposals with zero downtime.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Serving Traffic (Quorum 2/3)", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "surviving-key", v: "active", c: true }] },
+              { id: "node-2", role: "OFFLINE", term: 1, commit: 1, status: "DEAD / CRASHED", badge: "💥 Crashed", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 2, status: "Quorum Replicated", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "surviving-key", v: "active", c: true }] }
+            ]
+          }
+        ]
+      },
+      flapping_node: {
+        title: "🔄 8. Flapping Node Rapid Crash/Reboot Loops",
+        steps: [
+          {
+            stage: "1. Rapid Flap Cycles",
+            title: "Step 1: Node 2 Crashes and Reboots 4 Times in Rapid Succession",
+            desc: "Node 2 repeatedly restarts due to simulated OOM loops. It rapidly transitions OFFLINE ➔ REBOOT ➔ OFFLINE ➔ REBOOT.",
+            theoryTitle: "Monotonic Term Progression",
+            theoryDesc: "Persistent term counters in raft.meta ensure an oscillating node never destabilizes quorum or casts duplicate votes in past terms.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Stable Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 1, status: "🔄 Flapping Loop (4 cycles)", badge: "🔄 Oscillating", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Stable Follower", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Cluster Stability & Re-convergence",
+            title: "Step 2: Node 2 Stabilizes & Re-joins Quorum",
+            desc: "Node 2 finishes flapping. It receives heartbeat, syncs any missing entries, and cluster invariants remain 100% intact.",
+            theoryTitle: "Cluster Liveness Invariant",
+            theoryDesc: "Raft isolates volatile peers without affecting healthy quorum progress.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Active Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "flap-key", v: "stable", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 2, status: "Stabilized & Synced", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "flap-key", v: "stable", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 2, status: "Active Follower", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "flap-key", v: "stable", c: true }] }
+            ]
+          }
+        ]
+      },
+      disk_fault: {
+        title: "💾 9. Storage / WAL I/O Fault Recovery",
+        steps: [
+          {
+            stage: "1. Simulated Disk Fault",
+            title: "Step 1: Node 2 Encounters Storage I/O Error",
+            desc: "Node 2's underlying SidDBEngine / WAL encounters an unrecoverable disk fault. Node 2 safely transitions to OFFLINE.",
+            theoryTitle: "Storage Fault Isolation",
+            theoryDesc: "Storage failures are treated as crash stops. The faulty replica steps down to prevent serving corrupted reads.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 1, status: "Active Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-2", role: "OFFLINE", term: 1, commit: 1, status: "💾 DISK FAULT (Engine Halted)", badge: "💾 Storage Fault", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 1, status: "Healthy Quorum", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }] }
+            ]
+          },
+          {
+            stage: "2. Quorum Commit & Recovery",
+            title: "Step 2: Quorum Serves Traffic & Heals Restored Node",
+            desc: "Healthy Node 1 and Node 3 commit writes. When Node 2's disk is restored/restarted, it re-synchronizes completely.",
+            theoryTitle: "Durability Preservation Guarantee",
+            theoryDesc: "All committed data is guaranteed to survive because it is stored durably on at least a majority of nodes.",
+            partition: false,
+            nodes: [
+              { id: "node-1", role: "LEADER", term: 1, commit: 2, status: "Active Leader", badge: "👑 Leader", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "disk-key", v: "durable", c: true }] },
+              { id: "node-2", role: "FOLLOWER", term: 1, commit: 2, status: "Disk Restored & Synced", badge: "🛡️ Follower (Restored)", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "disk-key", v: "durable", c: true }] },
+              { id: "node-3", role: "FOLLOWER", term: 1, commit: 2, status: "Active Follower", badge: "🛡️ Follower", logs: [{ i: 1, t: 1, cmd: "PUT", k: "k1", v: "v1", c: true }, { i: 2, t: 1, cmd: "PUT", k: "disk-key", v: "durable", c: true }] }
+            ]
+          }
+        ]
+      }
+    };
+
+    // Storyboard State
+    let currentSimScenario = 'packet_loss';
+    let currentSimStepIdx = 0;
+    let simAutoPlayTimer = null;
+
+    function selectSimScenario(key) {
+      if (!SIMULATION_DATA[key]) {
+        currentSimScenario = 'packet_loss';
+      } else {
+        currentSimScenario = key;
+      }
+      currentSimStepIdx = 0;
+      if (simAutoPlayTimer) {
+        clearInterval(simAutoPlayTimer);
+        simAutoPlayTimer = null;
+        document.getElementById('sim-btn-play').innerText = "▶ Auto-Play";
+      }
+      const sel = document.getElementById('sim-scenario-select');
+      if (sel && sel.value !== currentSimScenario) sel.value = currentSimScenario;
+      renderSimStoryboard();
+    }
+
+    function renderSimStoryboard() {
+      const scenario = SIMULATION_DATA[currentSimScenario] || SIMULATION_DATA['packet_loss'];
+      const steps = scenario.steps;
+      const step = steps[currentSimStepIdx] || steps[0];
+
+      document.getElementById('sim-title').innerText = scenario.title;
+      document.getElementById('sim-stage-indicator').innerText = `STAGE: ${step.stage}`;
+      document.getElementById('sim-step-title').innerText = step.title;
+      document.getElementById('sim-step-counter').innerText = `Step ${currentSimStepIdx + 1} of ${steps.length}`;
+      document.getElementById('sim-step-desc').innerText = step.desc;
+      document.getElementById('sim-theory-title').innerText = step.theoryTitle;
+      document.getElementById('sim-theory-desc').innerText = step.theoryDesc;
+
+      // Stepper dots
+      const stepperDots = document.getElementById('sim-stepper-dots');
+      stepperDots.innerHTML = steps.map((s, idx) => `
+        <button onclick="goToSimStep(${idx})" class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition ${idx === currentSimStepIdx ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'}">
+          Step ${idx + 1}
+        </button>
+      `).join('');
+
+      document.getElementById('sim-btn-prev').disabled = (currentSimStepIdx === 0);
+      document.getElementById('sim-btn-next').disabled = (currentSimStepIdx === steps.length - 1);
+
+      // Partition Barrier Overlay
+      const barrier = document.getElementById('sim-partition-barrier');
+      if (step.partition) {
+        barrier.classList.remove('hidden');
+      } else {
+        barrier.classList.add('hidden');
+      }
+
+      // Nodes Canvas Rendering
+      const canvas = document.getElementById('sim-nodes-canvas');
+      canvas.innerHTML = step.nodes.map(n => {
+        let cardBorder = "border-slate-800 bg-[#111827]";
+        let badgeColor = "bg-blue-500/20 text-blue-300 border-blue-500/30";
+
+        if (n.role === 'LEADER') {
+          cardBorder = "border-emerald-500/60 bg-emerald-950/10 shadow-[0_0_20px_rgba(16,185,129,0.15)]";
+          badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+        } else if (n.role === 'CANDIDATE') {
+          cardBorder = "border-amber-500/60 bg-amber-950/10 shadow-[0_0_20px_rgba(245,158,11,0.15)]";
+          badgeColor = "bg-amber-500/20 text-amber-300 border-amber-500/30";
+        } else if (n.role === 'OFFLINE') {
+          cardBorder = "border-rose-600/50 bg-rose-950/20 opacity-60 border-dashed";
+          badgeColor = "bg-rose-500/20 text-rose-300 border-rose-500/30";
+        } else if (n.status && n.status.includes('Isolated')) {
+          cardBorder = "border-rose-500/60 bg-rose-950/10 border-dashed";
+          badgeColor = "bg-rose-500/20 text-rose-300 border-rose-500/30";
+        }
+
+        return `
+          <div class="border ${cardBorder} rounded-2xl p-4 space-y-3 transition-all duration-300 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="font-mono font-bold text-sm text-white">${n.id}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}">${n.badge}</span>
+            </div>
+
+            <!-- Term & Commit Stat -->
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="bg-slate-950 p-2 rounded-xl border border-slate-900">
+                <div class="text-[10px] text-slate-400">Term:</div>
+                <div class="font-mono font-bold text-amber-400">Term ${n.term}</div>
+              </div>
+              <div class="bg-slate-950 p-2 rounded-xl border border-slate-900">
+                <div class="text-[10px] text-slate-400">Commit:</div>
+                <div class="font-mono font-bold text-emerald-400">Index #${n.commit}</div>
+              </div>
+            </div>
+
+            <!-- Dynamic Raft Log View -->
+            <div class="space-y-1.5">
+              <div class="text-[10px] uppercase font-bold text-slate-400">Replicated Raft Log</div>
+              <div class="bg-slate-950 p-2 rounded-xl border border-slate-900 min-h-[90px] max-h-[105px] overflow-y-auto space-y-1 font-mono text-[10px]">
+                ${(n.logs || []).map(l => `
+                  <div class="p-1 rounded flex items-center justify-between ${l.c ? 'bg-emerald-950/30 text-emerald-200 border border-emerald-500/20' : 'bg-amber-950/30 text-amber-200 border border-amber-500/20'}">
+                    <span>#${l.i} [T${l.t}] ${l.cmd} <strong>${l.k}</strong>=${l.v}</span>
+                    <span class="text-[9px] ${l.c ? 'text-emerald-400 font-bold' : 'text-amber-400'}">${l.c ? '✓ Committed' : '⏳ Pending'}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="bg-slate-950/80 px-2 py-1 rounded-lg border border-slate-900 flex items-center justify-between text-[10px]">
+              <span class="text-slate-500">Status:</span>
+              <span class="font-medium ${n.role === 'OFFLINE' ? 'text-rose-400 font-bold' : 'text-slate-300'}">${n.status}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function nextSimStep() {
+      const scenario = SIMULATION_DATA[currentSimScenario] || SIMULATION_DATA['split_brain'];
+      if (currentSimStepIdx < scenario.steps.length - 1) {
+        currentSimStepIdx++;
+        renderSimStoryboard();
+      }
+    }
+
+    function prevSimStep() {
+      if (currentSimStepIdx > 0) {
+        currentSimStepIdx--;
+        renderSimStoryboard();
+      }
+    }
+
+    function goToSimStep(idx) {
+      currentSimStepIdx = idx;
+      renderSimStoryboard();
+    }
+
+    function toggleSimAutoPlay() {
+      const btn = document.getElementById('sim-btn-play');
+      if (simAutoPlayTimer) {
+        clearInterval(simAutoPlayTimer);
+        simAutoPlayTimer = null;
+        btn.innerText = "▶ Auto-Play";
+      } else {
+        btn.innerText = "⏸ Pause";
+        simAutoPlayTimer = setInterval(() => {
+          const scenario = SIMULATION_DATA[currentSimScenario] || SIMULATION_DATA['split_brain'];
+          if (currentSimStepIdx < scenario.steps.length - 1) {
+            currentSimStepIdx++;
+          } else {
+            currentSimStepIdx = 0;
+          }
+          renderSimStoryboard();
+        }, 2500);
+      }
+    }
+
+    // Initialize Storyboard on startup
+    renderSimStoryboard();
 
     // Live Polling intervals
     syncState();

@@ -11,6 +11,10 @@ import raft.RaftNode;
 import raft.RaftRole;
 import sstable.BlockCache;
 import sstable.SSTableReader;
+import chaos.*;
+import chaos.scenarios.*;
+import network.ChaoticTransport;
+import network.SimulatedNetwork;
 
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -77,6 +81,12 @@ public class SidDBServer {
         server.createContext("/api/cluster/heal", new ClusterHealHandler());
         server.createContext("/api/cluster/reset", new ClusterResetHandler());
 
+        // Chaos Testing & Failure Injection Endpoints (Isolated Mode)
+        server.createContext("/api/chaos/run", new ChaosRunHandler());
+        server.createContext("/api/chaos/report", new ChaosReportHandler());
+        server.createContext("/api/chaos/status", new ChaosStatusHandler());
+        server.createContext("/api/chaos/reset", new ChaosResetHandler());
+
         server.setExecutor(null); // Default executor
         System.out.println("==========================================================");
         System.out.println(" [*] SidDB Live Server running at: http://localhost:" + port);
@@ -125,6 +135,66 @@ public class SidDBServer {
             return m.group(1).trim();
         }
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String toJson(Object obj) {
+        if (obj == null) return "null";
+        if (obj instanceof String) {
+            return "\"" + escapeJson((String) obj) + "\"";
+        }
+        if (obj instanceof Number || obj instanceof Boolean) {
+            return obj.toString();
+        }
+        if (obj instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) obj;
+            StringBuilder sb = new StringBuilder("{");
+            int idx = 0;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (idx++ > 0) sb.append(",");
+                sb.append("\"").append(escapeJson(String.valueOf(entry.getKey()))).append("\":");
+                sb.append(toJson(entry.getValue()));
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+        if (obj instanceof Collection) {
+            Collection<?> col = (Collection<?>) obj;
+            StringBuilder sb = new StringBuilder("[");
+            int idx = 0;
+            for (Object item : col) {
+                if (idx++ > 0) sb.append(",");
+                sb.append(toJson(item));
+            }
+            sb.append("]");
+            return sb.toString();
+        }
+        return "\"" + escapeJson(obj.toString()) + "\"";
+    }
+
+    private static String escapeJson(String raw) {
+        if (raw == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            switch (c) {
+                case '"': sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\b': sb.append("\\b"); break;
+                case '\f': sb.append("\\f"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default:
+                    if (c < ' ') {
+                        String hex = String.format("\\u%04x", (int) c);
+                        sb.append(hex);
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        return sb.toString();
     }
 
     // Serve visualizer.html
@@ -574,6 +644,152 @@ public class SidDBServer {
                 }
             }
             dir.delete();
+        }
+    }
+
+    // ==========================================
+    // Chaos Engineering & Failure Handlers
+    // ==========================================
+
+    private static volatile ChaosReport lastChaosReport = null;
+
+    static class ChaosStatusHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 204, "", "application/json");
+                return;
+            }
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("hasReport", lastChaosReport != null);
+            if (lastChaosReport != null) {
+                resp.put("passedCount", lastChaosReport.getPassedCount());
+                resp.put("totalCount", lastChaosReport.getScenarioResults().size());
+                resp.put("allPassed", lastChaosReport.isAllPassed());
+            }
+            sendResponse(exchange, 200, toJson(resp), "application/json");
+        }
+    }
+
+    static class ChaosRunHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 204, "", "application/json");
+                return;
+            }
+            String body = readBody(exchange);
+            String scenarioParam = extractJsonField(body, "scenario");
+            if (scenarioParam == null || scenarioParam.isEmpty()) {
+                scenarioParam = "all";
+            }
+
+            File chaosDir = new File("data/chaos-cluster");
+            if (chaosDir.exists()) {
+                deleteDir(chaosDir);
+            }
+            chaosDir.mkdirs();
+
+            try {
+                SimulatedNetwork simNet = new SimulatedNetwork();
+                ChaoticTransport chaosTrans = new ChaoticTransport(simNet);
+                List<String> nodeIds = Arrays.asList("node-1", "node-2", "node-3");
+                RaftCluster chaosCluster = new RaftCluster(chaosDir.getAbsolutePath(), nodeIds, currentThreshold, chaosTrans);
+                chaosCluster.start();
+
+                ChaosClusterContext ctx = new ChaosClusterContext(chaosCluster, chaosTrans);
+                ChaosEngine engine = new ChaosEngine();
+
+                if ("packet_loss".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new PacketLossScenario());
+                } else if ("latency_jitter".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new LatencyJitterScenario());
+                } else if ("slow_follower".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new SlowFollowerScenario());
+                } else if ("leader_crash".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new NodeCrashRestartScenario());
+                } else if ("split_brain".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new SplitBrainScenario());
+                } else if ("message_reorder".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new MessageReorderScenario());
+                } else if ("correlated_crash".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new CorrelatedCrashScenario());
+                } else if ("flapping_node".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new FlappingNodeScenario());
+                } else if ("disk_fault".equalsIgnoreCase(scenarioParam)) {
+                    engine.register(new DiskFaultScenario());
+                } else {
+                    engine = ChaosEngine.createStandardSuite();
+                }
+
+                lastChaosReport = engine.run(ctx);
+                chaosCluster.close();
+                deleteDir(chaosDir);
+
+                Map<String, Object> resp = new LinkedHashMap<>();
+                resp.put("status", "completed");
+                resp.put("scenario", scenarioParam);
+                resp.put("allPassed", lastChaosReport.isAllPassed());
+                resp.put("passedCount", lastChaosReport.getPassedCount());
+                resp.put("totalCount", lastChaosReport.getScenarioResults().size());
+                resp.put("markdownReport", lastChaosReport.toMarkdown());
+
+                sendResponse(exchange, 200, toJson(resp), "application/json");
+
+            } catch (Exception e) {
+                sendResponse(exchange, 500, "{\"status\":\"error\",\"message\":\"" + e.getMessage() + "\"}", "application/json");
+            }
+        }
+
+        private void deleteDir(File dir) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    if (f.isDirectory()) deleteDir(f);
+                    else f.delete();
+                }
+            }
+            dir.delete();
+        }
+    }
+
+    static class ChaosReportHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 204, "", "application/json");
+                return;
+            }
+            if (lastChaosReport != null) {
+                Map<String, Object> resp = new LinkedHashMap<>();
+                resp.put("markdown", lastChaosReport.toMarkdown());
+                resp.put("allPassed", lastChaosReport.isAllPassed());
+                sendResponse(exchange, 200, toJson(resp), "application/json");
+            } else {
+                File file = new File("ChaosReport.md");
+                if (file.exists()) {
+                    byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+                    String content = new String(bytes, StandardCharsets.UTF_8);
+                    Map<String, Object> resp = new LinkedHashMap<>();
+                    resp.put("markdown", content);
+                    resp.put("allPassed", true);
+                    sendResponse(exchange, 200, toJson(resp), "application/json");
+                } else {
+                    sendResponse(exchange, 404, "{\"status\":\"not_found\",\"message\":\"No chaos report generated yet. Run a scenario first.\"}", "application/json");
+                }
+            }
+        }
+    }
+
+    static class ChaosResetHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 204, "", "application/json");
+                return;
+            }
+            lastChaosReport = null;
+            sendResponse(exchange, 200, "{\"status\":\"chaos_reset\"}", "application/json");
         }
     }
 }

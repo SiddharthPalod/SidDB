@@ -2,6 +2,7 @@ package raft;
 
 import engine.SidDBEngine;
 import network.SimulatedNetwork;
+import network.Transport;
 
 import java.io.File;
 import java.io.IOException;
@@ -12,16 +13,31 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RaftCluster implements AutoCloseable {
 
     private final SimulatedNetwork network;
+    private final Transport transport;
     private final Map<String, RaftNode> nodes;
     private final List<String> nodeIds;
     private final String baseDir;
     private final int memTableThreshold;
 
     public RaftCluster(String baseDir, List<String> nodeIds, int memTableThreshold) throws IOException {
+        this(baseDir, nodeIds, memTableThreshold, null);
+    }
+
+    public RaftCluster(String baseDir, List<String> nodeIds, int memTableThreshold, Transport customTransport) throws IOException {
         this.baseDir = baseDir;
         this.nodeIds = new ArrayList<>(nodeIds);
         this.memTableThreshold = memTableThreshold;
-        this.network = new SimulatedNetwork();
+        if (customTransport instanceof network.ChaoticTransport) {
+            this.transport = customTransport;
+            Transport del = ((network.ChaoticTransport) customTransport).getDelegate();
+            this.network = (del instanceof SimulatedNetwork) ? (SimulatedNetwork) del : new SimulatedNetwork();
+        } else if (customTransport instanceof SimulatedNetwork) {
+            this.network = (SimulatedNetwork) customTransport;
+            this.transport = customTransport;
+        } else {
+            this.network = new SimulatedNetwork();
+            this.transport = (customTransport != null) ? customTransport : this.network;
+        }
         this.nodes = new LinkedHashMap<>();
 
         File base = new File(baseDir);
@@ -35,7 +51,7 @@ public class RaftCluster implements AutoCloseable {
                 nodeDir.mkdirs();
             }
             SidDBEngine engine = new SidDBEngine(nodeDir.getAbsolutePath(), memTableThreshold);
-            RaftNode node = new RaftNode(id, nodeIds, network, engine, nodeDir.getAbsolutePath());
+            RaftNode node = new RaftNode(id, nodeIds, this.transport, engine, nodeDir.getAbsolutePath());
             nodes.put(id, node);
         }
     }
@@ -71,6 +87,53 @@ public class RaftCluster implements AutoCloseable {
 
     public synchronized SimulatedNetwork getNetwork() {
         return network;
+    }
+
+    public synchronized Transport getTransport() {
+        return transport;
+    }
+
+    public synchronized void crashNode(String nodeId) {
+        RaftNode node = nodes.get(nodeId);
+        if (node != null) {
+            node.close();
+        }
+    }
+
+    public synchronized RaftNode restartNode(String nodeId) throws IOException {
+        File nodeDir = new File(baseDir, nodeId);
+        SidDBEngine engine = new SidDBEngine(nodeDir.getAbsolutePath(), memTableThreshold);
+        RaftNode node = new RaftNode(nodeId, nodeIds, this.transport, engine, nodeDir.getAbsolutePath());
+        nodes.put(nodeId, node);
+        node.start();
+        return node;
+    }
+
+    public synchronized void ensureAllNodesRunning() {
+        for (String id : nodeIds) {
+            RaftNode n = nodes.get(id);
+            if (n == null || !n.isRunning()) {
+                try {
+                    restartNode(id);
+                } catch (IOException ignored) {}
+            }
+        }
+    }
+
+    public synchronized boolean verifyClusterConsistency(String key, Object expectedValue) {
+        for (RaftNode node : nodes.values()) {
+            if (node.isRunning() && node.getStateMachine() != null) {
+                try {
+                    Object val = node.getStateMachine().get(key);
+                    if (!Objects.equals(val, expectedValue)) {
+                        return false;
+                    }
+                } catch (IOException e) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     public CompletableFuture<Boolean> propose(String commandType, String key, Object value) {
