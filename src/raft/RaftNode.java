@@ -20,7 +20,7 @@ public class RaftNode implements AutoCloseable {
 
     private long currentTerm = 0;
     private String votedFor = null;
-    private RaftRole role = RaftRole.FOLLOWER;
+    private volatile RaftRole role = RaftRole.FOLLOWER;
     private String leaderId = null;
 
     // Leader state
@@ -32,6 +32,7 @@ public class RaftNode implements AutoCloseable {
     private final HeartbeatManager heartbeatManager;
     private final ScheduledExecutorService clientProposalScheduler = Executors.newSingleThreadScheduledExecutor();
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final ConcurrentHashMap<Long, List<CompletableFuture<Boolean>>> pendingProposals = new ConcurrentHashMap<>();
 
     public RaftNode(String nodeId, List<String> peers, Transport transport, SidDBEngine stateMachine) {
         this(nodeId, peers, transport, stateMachine, null, 150, 300, 50);
@@ -111,6 +112,12 @@ public class RaftNode implements AutoCloseable {
         stateStore.save(currentTerm, votedFor);
         heartbeatManager.stopHeartbeats();
         electionManager.resetElectionTimeout();
+        for (List<CompletableFuture<Boolean>> list : pendingProposals.values()) {
+            for (CompletableFuture<Boolean> f : list) {
+                f.complete(false);
+            }
+        }
+        pendingProposals.clear();
     }
 
     public synchronized void becomeLeader() {
@@ -170,6 +177,20 @@ public class RaftNode implements AutoCloseable {
                 }
             }
             log.setLastApplied(nextApply);
+        }
+        notifyCommittedProposals(log.getCommitIndex());
+    }
+
+    private void notifyCommittedProposals(long commitIndex) {
+        Iterator<Map.Entry<Long, List<CompletableFuture<Boolean>>>> it = pendingProposals.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Long, List<CompletableFuture<Boolean>>> entry = it.next();
+            if (entry.getKey() <= commitIndex) {
+                for (CompletableFuture<Boolean> f : entry.getValue()) {
+                    f.complete(true);
+                }
+                it.remove();
+            }
         }
     }
 
@@ -251,9 +272,6 @@ public class RaftNode implements AutoCloseable {
         RaftLogEntry entry = log.append(currentTerm, commandType, key, value);
         long targetIndex = entry.getIndex();
 
-        // Broadcast replication immediately via heartbeat manager
-        heartbeatManager.broadcastAppendEntries();
-
         if (peers.isEmpty()) {
             log.setCommitIndex(targetIndex);
             applyCommittedEntries();
@@ -261,6 +279,12 @@ public class RaftNode implements AutoCloseable {
             return future;
         }
 
+        pendingProposals.computeIfAbsent(targetIndex, k -> new CopyOnWriteArrayList<>()).add(future);
+
+        // Broadcast replication immediately via heartbeat manager
+        heartbeatManager.broadcastAppendEntries();
+
+        // Safety fallback timeout check
         clientProposalScheduler.schedule(new Runnable() {
             @Override
             public void run() {
@@ -269,12 +293,12 @@ public class RaftNode implements AutoCloseable {
                         future.complete(true);
                     } else if (role != RaftRole.LEADER || !running.get()) {
                         future.complete(false);
-                    } else {
-                        clientProposalScheduler.schedule(this, 20, TimeUnit.MILLISECONDS);
+                    } else if (!future.isDone()) {
+                        clientProposalScheduler.schedule(this, 10, TimeUnit.MILLISECONDS);
                     }
                 }
             }
-        }, 20, TimeUnit.MILLISECONDS);
+        }, 10, TimeUnit.MILLISECONDS);
 
         return future;
     }
@@ -282,7 +306,7 @@ public class RaftNode implements AutoCloseable {
     // --- Getters & Setters ---
 
     public String getNodeId() { return nodeId; }
-    public synchronized RaftRole getRole() { return role; }
+    public RaftRole getRole() { return role; }
     public synchronized void setRole(RaftRole role) { this.role = role; }
     public synchronized long getCurrentTerm() { return currentTerm; }
     public synchronized void setCurrentTerm(long currentTerm) { 

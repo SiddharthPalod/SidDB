@@ -3,6 +3,7 @@ package raft;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Manages randomized election timeouts to prevent split votes,
@@ -15,7 +16,7 @@ public class ElectionManager implements AutoCloseable {
     private final int maxElectionTimeoutMs;
     private final Random random = new Random();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private ScheduledFuture<?> electionTimeoutTask;
+    private final AtomicReference<ScheduledFuture<?>> electionTimeoutTask = new AtomicReference<>();
 
     public ElectionManager(RaftNode node, int minElectionTimeoutMs, int maxElectionTimeoutMs) {
         this.node = node;
@@ -23,22 +24,23 @@ public class ElectionManager implements AutoCloseable {
         this.maxElectionTimeoutMs = maxElectionTimeoutMs;
     }
 
-    public synchronized void resetElectionTimeout() {
+    public void resetElectionTimeout() {
         if (!node.isRunning() || node.getRole() == RaftRole.OFFLINE || node.getRole() == RaftRole.LEADER) {
             return;
         }
 
-        if (electionTimeoutTask != null) {
-            electionTimeoutTask.cancel(true);
-        }
-
         int timeout = minElectionTimeoutMs + random.nextInt(maxElectionTimeoutMs - minElectionTimeoutMs + 1);
-        electionTimeoutTask = scheduler.schedule(this::triggerElection, timeout, TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> newTask = scheduler.schedule(this::triggerElection, timeout, TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> oldTask = electionTimeoutTask.getAndSet(newTask);
+        if (oldTask != null) {
+            oldTask.cancel(true);
+        }
     }
 
-    public synchronized void cancelTimeout() {
-        if (electionTimeoutTask != null) {
-            electionTimeoutTask.cancel(true);
+    public void cancelTimeout() {
+        ScheduledFuture<?> task = electionTimeoutTask.getAndSet(null);
+        if (task != null) {
+            task.cancel(true);
         }
     }
 

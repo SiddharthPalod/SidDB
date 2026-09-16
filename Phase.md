@@ -358,3 +358,83 @@ Compare:
 3 nodes
 5 nodes
 ```
+
+---
+
+# Phase 8 — Production Hardening & High-Performance Enhancements
+
+**Week 15–18**
+
+Advance SidDB from an in-process verified prototype into a production-grade distributed storage engine.
+
+```text
+             Client Application / Benchmark Driver
+                               |
+                TCP Socket Transport (NIO)
+                               |
+              +----------------+----------------+
+              |                                 |
+        Node 1 (Port 9001)              Node 2 (Port 9002)
+  +---------------------------+   +---------------------------+
+  | Raft Consensus Engine     |   | Raft Consensus Engine     |
+  |  ├─ Leader Lease / ReadIdx|   |  ├─ Leader Lease / ReadIdx|
+  |  └─ Sync WAL fsync Policy |   |  └─ Sync WAL fsync Policy |
+  |                           |   |                           |
+  | LSM Storage Engine        |   | LSM Storage Engine        |
+  |  ├─ MemTable (SkipList)   |   |  ├─ MemTable (SkipList)   |
+  |  ├─ Async Compactor (Bg)  |   |  ├─ Async Compactor (Bg)  |
+  |  └─ WAF / SAF Telemetry   |   |  └─ WAF / SAF Telemetry   |
+  +---------------------------+   +---------------------------+
+```
+
+---
+
+### 1. High-Performance Linearizable Reads (Leader Leases & ReadIndex)
+
+* **Motivation**: Currently, linearizable reads propose a dummy write through Raft consensus, incurring full disk I/O, log replication, and 27–40 ms quorum latency (~600 ops/sec).
+* **Architecture**:
+  * **Leader Leases**: A leader elected by majority maintains a time-bounded lease bounded by `electionTimeoutMin - clockDrift`. As long as the lease is active, local reads are guaranteed linearizable without consensus roundtrips.
+  * **ReadIndex Protocol**:
+    1. Leader records current `commitIndex` as `readIndex`.
+    2. Sends a low-overhead heartbeat to quorum (no log writes) to ensure it hasn't been superseded.
+    3. Waits until `lastApplied >= readIndex`, then serves read directly from MemTable / SSTable.
+* **Target Metric**: Linearizable read throughput: **>100,000 ops/sec** with sub-millisecond P99 latency (<1 ms).
+
+---
+
+### 2. Follower WAL Durability & Dynamic `fsync` Policies
+
+* **Motivation**: Close the theoretical durability loophole where followers acknowledge `AppendEntries` while data remains in OS page cache.
+* **Architecture**:
+  * Introduce configurable `SyncPolicy`:
+    * `SYNC_EVERY_ENTRY`: Follower invokes `FileChannel.force(true)` synchronously before acknowledging `AppendEntriesResult(success = true)`.
+    * `SYNC_BATCH`: Fsync periodically or after batched frame thresholds.
+    * `ASYNC_FLUSH`: Default high-throughput memory-buffered mode.
+  * Durability SLA verification tests under sudden power-loss simulation.
+* **Target Metric**: Zero theoretical log loss on simultaneous power loss of minority nodes.
+
+---
+
+### 3. Decoupled Asynchronous Compactor & Amplification Metrics
+
+* **Motivation**: MemTable flushes and Level-0 to Level-1 compactions currently run synchronously on the write path, causing ~270 ms disk merge stalls under high concurrency (e.g. 64 clients).
+* **Architecture**:
+  * **Asynchronous `CompactionExecutor`**: Dedicated background thread pool decoupling SSTable merge routines from client write mutations.
+  * **Backpressure Mechanism**: Dynamic write throttling when uncompacted L0 SSTable count exceeds safe thresholds.
+  * **Real-time LSM Telemetry**:
+    * **Merge Throughput**: Dynamic MB/s merged.
+    * **Write Amplification Factor (WAF)**: $\text{Bytes Written to Disk} / \text{Bytes Written by User}$.
+    * **Space Amplification Factor (SAF)**: $\text{Total SSTable Disk Usage} / \text{Live Data Size}$.
+* **Target Metric**: Elimination of write-stall latency spikes; P99 write latency kept stable under continuous high client load.
+
+---
+
+### 4. Distributed TCP Socket Transport (`SocketTransport`)
+
+* **Motivation**: Transition SidDB from thread-based in-memory simulated networking to a true distributed network operating across distinct OS processes and physical machines.
+* **Architecture**:
+  * Java NIO (`ServerSocketChannel`, `SocketChannel`) or Netty-based framing.
+  * Efficient binary payload framing (`[Length: 4B][Type: 1B][CorrelationId: 8B][Payload]`).
+  * Connection pooling, heartbeat keep-alives, and automatic reconnection on peer failure.
+  * CLI node launcher: `java -jar siddb.jar --node-id=node-1 --port=9001 --peers=node-2:9002,node-3:9003`.
+* **Target Metric**: Full multi-node cluster deployment running across separate JVM processes or distributed servers.

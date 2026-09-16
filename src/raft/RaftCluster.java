@@ -38,7 +38,7 @@ public class RaftCluster implements AutoCloseable {
             this.network = new SimulatedNetwork();
             this.transport = (customTransport != null) ? customTransport : this.network;
         }
-        this.nodes = new LinkedHashMap<>();
+        this.nodes = new ConcurrentHashMap<>();
 
         File base = new File(baseDir);
         if (!base.exists()) {
@@ -68,7 +68,7 @@ public class RaftCluster implements AutoCloseable {
         }
     }
 
-    public synchronized RaftNode getLeader() {
+    public RaftNode getLeader() {
         for (RaftNode node : nodes.values()) {
             if (node.getRole() == RaftRole.LEADER && !network.isIsolated(node.getNodeId())) {
                 return node;
@@ -77,11 +77,11 @@ public class RaftCluster implements AutoCloseable {
         return null;
     }
 
-    public synchronized RaftNode getNode(String nodeId) {
+    public RaftNode getNode(String nodeId) {
         return nodes.get(nodeId);
     }
 
-    public synchronized Collection<RaftNode> getNodes() {
+    public Collection<RaftNode> getNodes() {
         return nodes.values();
     }
 
