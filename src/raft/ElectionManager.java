@@ -71,8 +71,7 @@ public class ElectionManager implements AutoCloseable {
         Set<String> votes = ConcurrentHashMap.newKeySet();
         votes.add(nodeId);
 
-        int totalNodes = node.getPeers().size() + 1;
-        int majority = (totalNodes / 2) + 1;
+        int majority = node.getQuorumSize();
 
         if (votes.size() >= majority) {
             node.becomeLeader();
@@ -89,8 +88,7 @@ public class ElectionManager implements AutoCloseable {
                 if (reply == null) return;
 
                 synchronized (node) {
-                    if (reply.getTerm() > node.getCurrentTerm()) {
-                        node.becomeFollower(reply.getTerm(), null);
+                    if (node.observeTerm(reply.getTerm(), null)) {
                         return;
                     }
 

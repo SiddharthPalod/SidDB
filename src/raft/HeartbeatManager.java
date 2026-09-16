@@ -68,8 +68,7 @@ public class HeartbeatManager implements AutoCloseable {
                 if (reply == null) return;
 
                 synchronized (node) {
-                    if (reply.getTerm() > node.getCurrentTerm()) {
-                        node.becomeFollower(reply.getTerm(), null);
+                    if (node.observeTerm(reply.getTerm(), null)) {
                         return;
                     }
 

@@ -1,20 +1,13 @@
 package raft;
 
-import java.io.Serializable;
-
-public class RequestVoteReply implements Serializable {
+public class RequestVoteReply extends RaftRpcMessage {
     private static final long serialVersionUID = 1L;
 
-    private final long term;
     private final boolean voteGranted;
 
     public RequestVoteReply(long term, boolean voteGranted) {
-        this.term = term;
+        super(term);
         this.voteGranted = voteGranted;
-    }
-
-    public long getTerm() {
-        return term;
     }
 
     public boolean isVoteGranted() {

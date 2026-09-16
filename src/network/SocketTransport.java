@@ -95,8 +95,8 @@ public class SocketTransport implements Transport, AutoCloseable {
         localNodes.remove(nodeId);
     }
 
-    @Override
-    public RequestVoteReply sendRequestVote(String fromNodeId, String targetNodeId, RequestVoteArgs args) {
+    @SuppressWarnings("unchecked")
+    private <RESP> RESP sendRpc(String targetNodeId, String rpcType, Object args) {
         InetSocketAddress addr = peerAddresses.get(targetNodeId);
         if (addr == null) return null;
 
@@ -105,38 +105,26 @@ public class SocketTransport implements Transport, AutoCloseable {
             socket.setSoTimeout(500);  // 500ms read timeout
 
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            out.writeUTF("VOTE");
+            out.writeUTF(rpcType);
             out.writeUTF(targetNodeId);
             out.writeObject(args);
             out.flush();
 
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-            return (RequestVoteReply) in.readObject();
+            return (RESP) in.readObject();
         } catch (Exception e) {
             return null; // Target offline / partitioned
         }
     }
 
     @Override
+    public RequestVoteReply sendRequestVote(String fromNodeId, String targetNodeId, RequestVoteArgs args) {
+        return sendRpc(targetNodeId, "VOTE", args);
+    }
+
+    @Override
     public AppendEntriesReply sendAppendEntries(String fromNodeId, String targetNodeId, AppendEntriesArgs args) {
-        InetSocketAddress addr = peerAddresses.get(targetNodeId);
-        if (addr == null) return null;
-
-        try (Socket socket = new Socket()) {
-            socket.connect(addr, 500); // 500ms connect timeout
-            socket.setSoTimeout(500);  // 500ms read timeout
-
-            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            out.writeUTF("APPEND");
-            out.writeUTF(targetNodeId);
-            out.writeObject(args);
-            out.flush();
-
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-            return (AppendEntriesReply) in.readObject();
-        } catch (Exception e) {
-            return null; // Target offline / partitioned
-        }
+        return sendRpc(targetNodeId, "APPEND", args);
     }
 
     @Override

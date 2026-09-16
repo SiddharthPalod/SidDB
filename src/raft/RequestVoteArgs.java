@@ -1,24 +1,17 @@
 package raft;
 
-import java.io.Serializable;
-
-public class RequestVoteArgs implements Serializable {
+public class RequestVoteArgs extends RaftRpcMessage {
     private static final long serialVersionUID = 1L;
 
-    private final long term;
     private final String candidateId;
     private final long lastLogIndex;
     private final long lastLogTerm;
 
     public RequestVoteArgs(long term, String candidateId, long lastLogIndex, long lastLogTerm) {
-        this.term = term;
+        super(term);
         this.candidateId = candidateId;
         this.lastLogIndex = lastLogIndex;
         this.lastLogTerm = lastLogTerm;
-    }
-
-    public long getTerm() {
-        return term;
     }
 
     public String getCandidateId() {

@@ -1,12 +1,10 @@
 package raft;
 
-import java.io.Serializable;
 import java.util.List;
 
-public class AppendEntriesArgs implements Serializable {
+public class AppendEntriesArgs extends RaftRpcMessage {
     private static final long serialVersionUID = 1L;
 
-    private final long term;
     private final String leaderId;
     private final long prevLogIndex;
     private final long prevLogTerm;
@@ -15,16 +13,12 @@ public class AppendEntriesArgs implements Serializable {
 
     public AppendEntriesArgs(long term, String leaderId, long prevLogIndex, long prevLogTerm, 
                              List<RaftLogEntry> entries, long leaderCommit) {
-        this.term = term;
+        super(term);
         this.leaderId = leaderId;
         this.prevLogIndex = prevLogIndex;
         this.prevLogTerm = prevLogTerm;
         this.entries = entries;
         this.leaderCommit = leaderCommit;
-    }
-
-    public long getTerm() {
-        return term;
     }
 
     public String getLeaderId() {

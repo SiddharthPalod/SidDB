@@ -3,7 +3,8 @@ package raft;
 import engine.SidDBEngine;
 import network.Transport;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -15,7 +16,7 @@ public class RaftNode implements AutoCloseable {
     private final Transport transport;
     private final SidDBEngine stateMachine;
     private final RaftLog log;
-    private final File metaFile;
+    private final RaftStateStore stateStore;
 
     private long currentTerm = 0;
     private String votedFor = null;
@@ -47,15 +48,15 @@ public class RaftNode implements AutoCloseable {
         this.peers.remove(nodeId); // Exclude self
         this.transport = transport;
         this.stateMachine = stateMachine;
+        this.stateStore = new RaftStateStore(stateDir);
 
         if (stateDir != null) {
             File dir = new File(stateDir);
-            if (!dir.exists()) dir.mkdirs();
-            this.metaFile = new File(dir, "raft.meta");
             this.log = new RaftLog(new File(dir, "raft.log").getAbsolutePath());
-            recoverState();
+            RaftStateStore.PersistedState state = stateStore.load();
+            this.currentTerm = state.term;
+            this.votedFor = state.votedFor;
         } else {
-            this.metaFile = null;
             this.log = new RaftLog();
         }
 
@@ -65,25 +66,6 @@ public class RaftNode implements AutoCloseable {
         if (transport != null) {
             transport.registerNode(nodeId, this);
         }
-    }
-
-    private synchronized void recoverState() {
-        if (metaFile != null && metaFile.exists()) {
-            try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(metaFile)))) {
-                this.currentTerm = in.readLong();
-                String vf = in.readUTF();
-                this.votedFor = vf.isEmpty() ? null : vf;
-            } catch (IOException ignored) {}
-        }
-    }
-
-    private synchronized void persistState() {
-        if (metaFile == null) return;
-        try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(metaFile)))) {
-            out.writeLong(currentTerm);
-            out.writeUTF(votedFor != null ? votedFor : "");
-            out.flush();
-        } catch (IOException ignored) {}
     }
 
     public synchronized void start() {
@@ -104,14 +86,29 @@ public class RaftNode implements AutoCloseable {
         }
     }
 
-    // --- Role Transitions ---
+    // --- Role Transitions & Protocol Invariants ---
+
+    public int getQuorumSize() {
+        return ((peers.size() + 1) / 2) + 1;
+    }
+
+    /**
+     * Centralized Raft invariant: If remoteTerm > currentTerm, update term and convert to FOLLOWER.
+     */
+    public synchronized boolean observeTerm(long remoteTerm, String leaderHint) {
+        if (remoteTerm > currentTerm) {
+            becomeFollower(remoteTerm, leaderHint);
+            return true;
+        }
+        return false;
+    }
 
     public synchronized void becomeFollower(long term, String leader) {
         this.role = RaftRole.FOLLOWER;
         this.currentTerm = term;
         this.votedFor = null;
         this.leaderId = leader;
-        persistState();
+        stateStore.save(currentTerm, votedFor);
         heartbeatManager.stopHeartbeats();
         electionManager.resetElectionTimeout();
     }
@@ -138,6 +135,7 @@ public class RaftNode implements AutoCloseable {
 
         long currentCommit = log.getCommitIndex();
         long lastIndex = log.getLastLogIndex();
+        int majority = getQuorumSize();
 
         for (long N = currentCommit + 1; N <= lastIndex; N++) {
             if (log.getTermAt(N) == currentTerm) {
@@ -147,7 +145,6 @@ public class RaftNode implements AutoCloseable {
                         replicatedCount++;
                     }
                 }
-                int majority = ((peers.size() + 1) / 2) + 1;
                 if (replicatedCount >= majority) {
                     log.setCommitIndex(N);
                 }
@@ -187,16 +184,14 @@ public class RaftNode implements AutoCloseable {
             return new RequestVoteReply(currentTerm, false);
         }
 
-        if (args.getTerm() > currentTerm) {
-            becomeFollower(args.getTerm(), null);
-        }
+        observeTerm(args.getTerm(), null);
 
         boolean canVote = (votedFor == null || votedFor.equals(args.getCandidateId()));
         boolean isUpToDate = isLogUpToDate(args.getLastLogTerm(), args.getLastLogIndex());
 
         if (canVote && isUpToDate) {
             votedFor = args.getCandidateId();
-            persistState();
+            stateStore.save(currentTerm, votedFor);
             electionManager.resetElectionTimeout();
             return new RequestVoteReply(currentTerm, true);
         }
@@ -292,12 +287,12 @@ public class RaftNode implements AutoCloseable {
     public synchronized long getCurrentTerm() { return currentTerm; }
     public synchronized void setCurrentTerm(long currentTerm) { 
         this.currentTerm = currentTerm; 
-        persistState();
+        stateStore.save(currentTerm, votedFor);
     }
     public synchronized String getVotedFor() { return votedFor; }
     public synchronized void setVotedFor(String votedFor) { 
         this.votedFor = votedFor; 
-        persistState();
+        stateStore.save(currentTerm, votedFor);
     }
     public synchronized String getLeaderId() { return leaderId; }
     public synchronized void setLeaderId(String leaderId) { this.leaderId = leaderId; }
