@@ -11,3 +11,22 @@ java -cp out test.TestRunner
 
 SidDB live server
 java -cp out server.SidDBServer
+
+# Test Multi-Process Real TCP Cluster (Different port rather than threads in live server)
+Compile
+javac -d out (Get-ChildItem -Recurse -Include *.java src,test | ForEach-Object { $_.FullName })
+
+### Start 3 Nodes
+java -cp out server.DistributedNodeServer node-1 9001 node-2=127.0.0.1:9002,node-3=127.0.0.1:9003
+java -cp out server.DistributedNodeServer node-2 9002 node-1=127.0.0.1:9001,node-3=127.0.0.1:9003
+java -cp out server.DistributedNodeServer node-3 9003 node-1=127.0.0.1:9001,node-2=127.0.0.1:9002
+
+### Interactive Commands
+- Shows node role, term, leader, and replicated logs.
+status
+- Run on the leader to replicate a key-value entry.
+put user:500 "Siddharth"
+- Run on a follower to verify replicated data.
+get user:500
+- Quit
+exit

@@ -28,6 +28,10 @@ public class TestRunner {
         testSuites.add(new TestEntry("Phase 3: L0 -> L1 -> L2 Cascading Compaction Test", Phase3CompactionTest::run));
         testSuites.add(new TestEntry("Phase 3: LRU Block Cache & Hit Ratio Test", Phase3BlockCacheTest::run));
         testSuites.add(new TestEntry("Phase 4: ACID Transactions (WriteBatch & MVCC Snapshots)", Phase4ACIDTest::run));
+        testSuites.add(new TestEntry("Phase 5: Raft Consensus & Distributed Replication", Phase5RaftTest::run));
+        testSuites.add(new TestEntry("Phase 5: Real TCP Socket Transport Test", SocketTransportTest::run));
+        testSuites.add(new TestEntry("Phase 5: Raft Disk Persistence & Crash Recovery Test", Phase5RaftCrashRecoveryTest::run));
+        testSuites.add(new TestEntry("Phase 5: Multi-Process Real TCP Cluster Demo", MultiProcessClusterDemo::run));
 
         System.out.println("=================================================");
         System.out.println("          SidDB Regression Test Suite            ");

@@ -70,7 +70,11 @@ public class WAL implements AutoCloseable {
     
     @Override
     public synchronized void close() throws IOException {
-        fileHandle.getFD().sync();
-        fileHandle.close();
+        try {
+            if (fileHandle != null && fileHandle.getFD().valid()) {
+                fileHandle.getFD().sync();
+                fileHandle.close();
+            }
+        } catch (Exception ignored) {}
     }
 }
