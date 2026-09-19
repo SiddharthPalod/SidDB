@@ -88,6 +88,9 @@ public class SidDBServer {
         server.createContext("/api/chaos/status", new ChaosStatusHandler());
         server.createContext("/api/chaos/reset", new ChaosResetHandler());
 
+        // Benchmark Reports Endpoint
+        server.createContext("/api/benchmark/report", new BenchmarkReportHandler());
+
         server.setExecutor(null); // Default executor
         System.out.println("==========================================================");
         System.out.println(" [*] SidDB Live Server running at: http://localhost:" + port);
@@ -836,6 +839,26 @@ public class SidDBServer {
             }
             lastChaosReport = null;
             sendResponse(exchange, 200, "{\"status\":\"chaos_reset\"}", "application/json");
+        }
+    }
+
+    static class BenchmarkReportHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 204, "", "application/json");
+                return;
+            }
+            File file = new File("BenchmarkReport.md");
+            if (file.exists()) {
+                byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+                String content = new String(bytes, StandardCharsets.UTF_8);
+                Map<String, Object> resp = new LinkedHashMap<>();
+                resp.put("markdown", content);
+                sendResponse(exchange, 200, toJson(resp), "application/json");
+            } else {
+                sendResponse(exchange, 404, "{\"status\":\"not_found\",\"message\":\"No BenchmarkReport.md found\"}", "application/json");
+            }
         }
     }
 }
