@@ -172,7 +172,7 @@ SidDB includes an interactive visualizer web application to inspect and manipula
 * **Real-time Ring / Mesh Topology**: Visualizes Leader, Follower, and Candidate states with heartbeat pulses.
 * **LSM-Tree Inspector**: Live visualization of MemTable entries, Level 0..N SSTables, Bloom filters, and Block Cache hit ratios.
 * **Chaos Injection Controls**: Trigger packet drops, partitions, and hard node crashes with a single click.
-* **Access**: Open `visualizer/index.html` or `siddb_visualizer.html` directly in any web browser.
+* **Access**: Simply open [`visualizer.html`](visualizer.html) in any web browser (Chrome, Edge, Firefox, Safari). No web server or node.js setup required.
 
 ---
 
@@ -337,10 +337,7 @@ SidDB/
 │   ├── SocketTransportTest.java
 │   ├── TcpChaosTest.java
 │   └── TestRunner.java       # Master test runner
-├── visualizer/               # Interactive web visualization studio
-│   ├── index.html
-│   ├── app.js
-│   └── styles.css
+├── visualizer.html           # Interactive self-contained web visualization studio
 ├── BenchmarkReport.md        # Real multi-process empirical benchmark report
 ├── ChaosReport.md            # 9-scenario chaos & consistency verification report
 ├── Phase.md                  # Comprehensive architectural phase specification
