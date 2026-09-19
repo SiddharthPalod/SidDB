@@ -1,6 +1,6 @@
 # SidDB Chaos Engineering & Consistency Verification Report
 
-**Generated at:** `2026-09-19 13:42:13`  
+**Generated at:** `2026-09-19 13:55:21`  
 **Cluster Architecture:** Distributed Raft Consensus with LSM Storage Engine (`SidDBEngine`)  
 
 ## Executive Summary
@@ -16,15 +16,15 @@
 
 | # | Scenario | Status | Duration | Observation & Invariant Validation |
 |---|---|---|---|---|
-| 1 | **25% Random Packet Loss** | `[PASS] OK` | 92 ms | Leader node-3 elected; writes committed in 11 ms under 25% drop rate (dropped: 1 pkts) |
-| 2 | **Network Latency & Jitter (50ms - 150ms)** | `[PASS] OK` | 114 ms | Replicated across nodes with jitter in 74 ms (delayed msgs: 8) |
-| 3 | **Slow Follower & Fast Catch-up** | `[PASS] OK` | 56 ms | Lagging node 'node-1' backtracked nextIndex and synchronized to log index 12 |
-| 4 | **Leader Crash & Disk Reboot** | `[PASS] OK` | 270 ms | Old leader 'node-3' crashed. New leader 'node-2' elected in 202 ms. Rebooted node reconciled. |
-| 5 | **Asymmetric Partition & Split-Brain** | `[PASS] OK` | 948 ms | Minority partition write rejected (CORRECT); Majority committed (CORRECT); Healed state converged to 'majority-true-val' |
-| 6 | **Out-of-Order Message Delivery** | `[PASS] OK` | 90 ms | Out-of-order RPCs safely filtered by Raft prevLogIndex/term invariants across all nodes |
-| 7 | **Correlated Multi-Node Crash** | `[PASS] OK` | 272 ms | Crashed 1 nodes simultaneously (node-1). Surviving quorum committed write; rebooted nodes caught up. |
-| 8 | **Flapping Node (Rapid Crash/Reboot Loop)** | `[PASS] OK` | 788 ms | Node 'node-1' survived 4 crash/reboot loops without corrupting monotonic terms or log integrity. |
-| 9 | **Storage / Disk Fault Simulation** | `[PASS] OK` | 110 ms | Node 'node-1' handled simulated I/O fault; healthy quorum preserved durability and caught up node on restart. |
+| 1 | **25% Random Packet Loss** | `[PASS] OK` | 54 ms | Leader node-2 elected; writes committed in 14 ms under 25% drop rate (dropped: 1 pkts) |
+| 2 | **Network Latency & Jitter (50ms - 150ms)** | `[PASS] OK` | 160 ms | Replicated across nodes with jitter in 118 ms (delayed msgs: 8) |
+| 3 | **Slow Follower & Fast Catch-up** | `[PASS] OK` | 59 ms | Lagging node 'node-1' backtracked nextIndex and synchronized to log index 12 |
+| 4 | **Leader Crash & Disk Reboot** | `[PASS] OK` | 573 ms | Old leader 'node-2' crashed. New leader 'node-1' elected in 505 ms. Rebooted node reconciled. |
+| 5 | **Asymmetric Partition & Split-Brain** | `[PASS] OK` | 946 ms | Minority partition write rejected (CORRECT); Majority committed (CORRECT); Healed state converged to 'majority-true-val' |
+| 6 | **Out-of-Order Message Delivery** | `[PASS] OK` | 108 ms | Out-of-order RPCs safely filtered by Raft prevLogIndex/term invariants across all nodes |
+| 7 | **Correlated Multi-Node Crash** | `[PASS] OK` | 309 ms | Crashed 1 nodes simultaneously (node-1). Surviving quorum committed write; rebooted nodes caught up. |
+| 8 | **Flapping Node (Rapid Crash/Reboot Loop)** | `[PASS] OK` | 593 ms | Node 'node-1' survived 4 crash/reboot loops without corrupting monotonic terms or log integrity. |
+| 9 | **Storage / Disk Fault Simulation** | `[PASS] OK` | 108 ms | Node 'node-1' handled simulated I/O fault; healthy quorum preserved durability and caught up node on restart. |
 
 ## 2. Partition Tolerance & Linearizability Verification
 
@@ -56,10 +56,10 @@ SidDB shifts from **Single-Node ACID** (Phase 4) to **Distributed CP (Consistenc
 
 | Measured Invariant / Operation | Value | Unit | Architectural Significance |
 |---|---|---|---|
-| Baseline Commit Latency (3-node in-memory quorum) | 5.80 | ms / write | High |
-| Packet Loss Commit Latency (2 writes) | 11.00 | ms | High |
-| Latency Jitter Commit Time (2 writes) | 74.00 | ms | High |
-| Leader Failover & Election Duration | 202.00 | ms | High |
+| Baseline Commit Latency (3-node in-memory quorum) | 7.00 | ms / write | High |
+| Packet Loss Commit Latency (2 writes) | 14.00 | ms | High |
+| Latency Jitter Commit Time (2 writes) | 118.00 | ms | High |
+| Leader Failover & Election Duration | 505.00 | ms | High |
 
 ## 4. Failure Mode Landscape & Distributed Fault Taxonomy
 

@@ -39,17 +39,23 @@ public class RaftNode implements AutoCloseable {
     private final long leaseDurationNs;
     private volatile long leaseExpiryNs = 0L;
     private volatile ReadMode readMode = ReadMode.LEADER_LEASE;
+    private volatile SyncPolicy syncPolicy = SyncPolicy.SYNC_EVERY_ENTRY;
 
     public RaftNode(String nodeId, List<String> peers, Transport transport, SidDBEngine stateMachine) {
-        this(nodeId, peers, transport, stateMachine, null, 150, 300, 50);
+        this(nodeId, peers, transport, stateMachine, null, 150, 300, 50, SyncPolicy.SYNC_EVERY_ENTRY);
     }
 
     public RaftNode(String nodeId, List<String> peers, Transport transport, SidDBEngine stateMachine, String stateDir) {
-        this(nodeId, peers, transport, stateMachine, stateDir, 150, 300, 50);
+        this(nodeId, peers, transport, stateMachine, stateDir, 150, 300, 50, SyncPolicy.SYNC_EVERY_ENTRY);
     }
 
     public RaftNode(String nodeId, List<String> peers, Transport transport, SidDBEngine stateMachine, String stateDir,
                     int minElectionTimeoutMs, int maxElectionTimeoutMs, int heartbeatIntervalMs) {
+        this(nodeId, peers, transport, stateMachine, stateDir, minElectionTimeoutMs, maxElectionTimeoutMs, heartbeatIntervalMs, SyncPolicy.SYNC_EVERY_ENTRY);
+    }
+
+    public RaftNode(String nodeId, List<String> peers, Transport transport, SidDBEngine stateMachine, String stateDir,
+                    int minElectionTimeoutMs, int maxElectionTimeoutMs, int heartbeatIntervalMs, SyncPolicy syncPolicy) {
         this.nodeId = nodeId;
         this.peers = new ArrayList<>(peers);
         this.peers.remove(nodeId); // Exclude self
@@ -57,17 +63,18 @@ public class RaftNode implements AutoCloseable {
         this.stateMachine = stateMachine;
         this.stateStore = new RaftStateStore(stateDir);
         this.minElectionTimeoutMs = minElectionTimeoutMs;
+        this.syncPolicy = (syncPolicy != null) ? syncPolicy : SyncPolicy.SYNC_EVERY_ENTRY;
         // Conservative lease duration: 80% of min election timeout in nanoseconds
         this.leaseDurationNs = (long) (minElectionTimeoutMs * 0.80 * 1_000_000L);
 
         if (stateDir != null) {
             File dir = new File(stateDir);
-            this.log = new RaftLog(new File(dir, "raft.log").getAbsolutePath());
+            this.log = new RaftLog(new File(dir, "raft.log").getAbsolutePath(), this.syncPolicy);
             RaftStateStore.PersistedState state = stateStore.load();
             this.currentTerm = state.term;
             this.votedFor = state.votedFor;
         } else {
-            this.log = new RaftLog();
+            this.log = new RaftLog(null, this.syncPolicy);
         }
 
         this.electionManager = new ElectionManager(this, minElectionTimeoutMs, maxElectionTimeoutMs);
@@ -456,6 +463,14 @@ public class RaftNode implements AutoCloseable {
     public Map<String, Long> getNextIndex() { return nextIndex; }
     public Map<String, Long> getMatchIndex() { return matchIndex; }
     public boolean isRunning() { return running.get(); }
+
+    public SyncPolicy getSyncPolicy() { return syncPolicy; }
+    public void setSyncPolicy(SyncPolicy syncPolicy) {
+        this.syncPolicy = syncPolicy;
+        if (this.log != null) {
+            this.log.setSyncPolicy(syncPolicy);
+        }
+    }
 
     public ElectionManager getElectionManager() { return electionManager; }
     public HeartbeatManager getHeartbeatManager() { return heartbeatManager; }

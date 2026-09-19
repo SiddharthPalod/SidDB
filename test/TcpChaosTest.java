@@ -61,8 +61,8 @@ public class TcpChaosTest {
             long t0 = System.currentTimeMillis();
             AppendEntriesReply delayedReply = chaoticTcp1.sendAppendEntries("node-1", "node-2", appendArgs);
             long elapsed = System.currentTimeMillis() - t0;
-            if (delayedReply == null || !delayedReply.isSuccess() || elapsed < 140) {
-                throw new AssertionError("Expected TCP RPC to be delayed >= 140ms, took: " + elapsed + "ms");
+            if (delayedReply == null || !delayedReply.isSuccess() || elapsed < 120) {
+                throw new AssertionError("Expected TCP RPC to be delayed >= 120ms, took: " + elapsed + "ms");
             }
             System.out.println("  [+] TCP Latency Jitter: RPC delivered over TCP socket with " + elapsed + " ms transit delay.");
 

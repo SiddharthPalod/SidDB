@@ -44,10 +44,12 @@ public class RaftStateStore {
 
     public synchronized void save(long currentTerm, String votedFor) {
         if (metaFile == null) return;
-        try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(metaFile)))) {
+        try (FileOutputStream fos = new FileOutputStream(metaFile);
+             DataOutputStream out = new DataOutputStream(new BufferedOutputStream(fos))) {
             out.writeLong(currentTerm);
             out.writeUTF(votedFor != null ? votedFor : "");
             out.flush();
+            fos.getFD().sync();
         } catch (IOException ignored) {}
     }
 }

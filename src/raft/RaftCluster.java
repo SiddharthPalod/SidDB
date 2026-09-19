@@ -162,6 +162,12 @@ public class RaftCluster implements AutoCloseable {
         }
     }
 
+    public void setSyncPolicy(SyncPolicy policy) {
+        for (RaftNode node : nodes.values()) {
+            node.setSyncPolicy(policy);
+        }
+    }
+
     public void isolateNode(String nodeId) {
         network.isolateNode(nodeId);
     }
