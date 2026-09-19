@@ -428,13 +428,3 @@ Advance SidDB from an in-process verified prototype into a production-grade dist
 * **Target Metric**: Elimination of write-stall latency spikes; P99 write latency kept stable under continuous high client load.
 
 ---
-
-### 4. Distributed TCP Socket Transport (`SocketTransport`)
-
-* **Motivation**: Transition SidDB from thread-based in-memory simulated networking to a true distributed network operating across distinct OS processes and physical machines.
-* **Architecture**:
-  * Java NIO (`ServerSocketChannel`, `SocketChannel`) or Netty-based framing.
-  * Efficient binary payload framing (`[Length: 4B][Type: 1B][CorrelationId: 8B][Payload]`).
-  * Connection pooling, heartbeat keep-alives, and automatic reconnection on peer failure.
-  * CLI node launcher: `java -jar siddb.jar --node-id=node-1 --port=9001 --peers=node-2:9002,node-3:9003`.
-* **Target Metric**: Full multi-node cluster deployment running across separate JVM processes or distributed servers.

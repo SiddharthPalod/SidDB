@@ -1,11 +1,17 @@
 # Compiled class files
 out/
+bin/
 *.class
 
-# Database files
+# Database and runtime data directories
+data/
+*.wal/
+*.wal
 *.sb
 *.db
-*.wal
+*.bf
+*.idx
+*.meta
 
 # Logs
 *.log
