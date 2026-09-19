@@ -79,6 +79,35 @@ public class SocketTransport implements Transport, AutoCloseable {
                 AppendEntriesArgs args = (AppendEntriesArgs) in.readObject();
                 AppendEntriesReply reply = targetNode.handleAppendEntries(args);
                 out.writeObject(reply);
+            } else if ("CLIENT_PUT".equals(rpcType)) {
+                String key = in.readUTF();
+                Object val = in.readObject();
+                long timeoutMs = in.readLong();
+                try {
+                    boolean ok = targetNode.propose("PUT", key, val).get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    out.writeBoolean(ok);
+                } catch (Exception e) {
+                    out.writeBoolean(false);
+                }
+            } else if ("CLIENT_GET".equals(rpcType)) {
+                String key = in.readUTF();
+                try {
+                    Object val = targetNode.getStateMachine() != null ? targetNode.getStateMachine().get(key) : null;
+                    out.writeObject(val);
+                } catch (Exception e) {
+                    out.writeObject(null);
+                }
+            } else if ("CLIENT_READ_LINEARIZABLE".equals(rpcType)) {
+                String key = in.readUTF();
+                long timeoutMs = in.readLong();
+                try {
+                    Object val = targetNode.readLinearizable(key).get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    out.writeObject(val);
+                } catch (Exception e) {
+                    out.writeObject(null);
+                }
+            } else if ("CLIENT_STATUS".equals(rpcType)) {
+                out.writeObject(targetNode.getStatusMap());
             }
             out.flush();
         } catch (Exception ignored) {

@@ -31,3 +31,7 @@ put user:500 "Siddharth"
 get user:500
 - Quit
 exit
+
+## Benchmark runner
+java -cp out benchmark.BenchmarkRunner
+java -cp out benchmark.MultiProcessBenchmarkRunner

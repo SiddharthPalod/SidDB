@@ -78,7 +78,7 @@ public class DistributedNodeServer {
         // 3. Initialize Raft State Machine
         List<String> allClusterNodes = new ArrayList<>(peerIds);
         allClusterNodes.add(nodeId);
-        RaftNode raftNode = new RaftNode(nodeId, allClusterNodes, transport, engine, dir.getAbsolutePath());
+        RaftNode raftNode = new RaftNode(nodeId, allClusterNodes, transport, engine, dir.getAbsolutePath(), 400, 800, 80);
         raftNode.start();
 
         System.out.println("==================================================================");
