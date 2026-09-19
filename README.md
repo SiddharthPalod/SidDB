@@ -1,11 +1,4 @@
 # ⚡ SidDB (Siddharth Distributed Database)
-
-[![Java Version](https://img.shields.io/badge/Java-11%2B-blue.svg)](https://openjdk.java.net/)
-[![Architecture](https://img.shields.io/badge/Architecture-LSM--Tree%20%2B%20Raft%20Consensus-orange.svg)]()
-[![Consensus](https://img.shields.io/badge/Consensus-Distributed%20Raft%20(CP)-green.svg)]()
-[![Tests](https://img.shields.io/badge/Regression%20Tests-16%2F16%20Passed%20(100%25)-brightgreen.svg)]()
-[![Durability](https://img.shields.io/badge/Durability-Strict%20WAL%20fsync%20%2B%20Zero%20Data%20Loss-success.svg)]()
-
 **SidDB** is a production-grade, distributed, log-structured merge-tree (LSM-Tree) key-value storage engine engineered from scratch in Java. It features multi-node **Raft Consensus**, **ACID transactions with MVCC snapshot isolation**, **real OS TCP socket networking**, **asynchronous tiered SSTable compactions**, **strict follower WAL durability with dynamic fsync**, and **high-performance linearizable reads (Leader Leases & ReadIndex)**.
 
 ---
