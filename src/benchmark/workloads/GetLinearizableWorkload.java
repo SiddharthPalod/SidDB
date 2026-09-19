@@ -36,7 +36,7 @@ public class GetLinearizableWorkload implements BenchmarkWorkload {
             } catch (Exception ignored) {}
         }
 
-        int operations = Math.max(100, clients * 20);
+        int operations = Math.max(500, clients * 50);
         List<Long> latenciesUs = new CopyOnWriteArrayList<>();
         AtomicInteger errorCount = new AtomicInteger(0);
 
@@ -56,18 +56,13 @@ public class GetLinearizableWorkload implements BenchmarkWorkload {
                     }
 
                     long startNs = System.nanoTime();
-                    // Linearizable read: Propose read barrier into Raft consensus to guarantee quorum validity
-                    CompletableFuture<Boolean> future = currentLeader.propose("READ_BARRIER", "lin-key-" + keyId, null);
-                    Boolean ok = future.get(3000, TimeUnit.MILLISECONDS);
-                    
-                    if (Boolean.TRUE.equals(ok)) {
-                        Object val = currentLeader.getStateMachine().get("lin-key-" + keyId);
-                        long endNs = System.nanoTime();
-                        if (val != null) {
-                            latenciesUs.add((endNs - startNs) / 1000L); // µs
-                        } else {
-                            errorCount.incrementAndGet();
-                        }
+                    // High-performance linearizable read via Leader Lease / ReadIndex
+                    CompletableFuture<Object> future = currentLeader.readLinearizable("lin-key-" + keyId);
+                    Object val = future.get(3000, TimeUnit.MILLISECONDS);
+                    long endNs = System.nanoTime();
+
+                    if (val != null) {
+                        latenciesUs.add((endNs - startNs) / 1000L); // µs
                     } else {
                         errorCount.incrementAndGet();
                     }

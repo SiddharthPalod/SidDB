@@ -34,6 +34,7 @@ public class TestRunner {
         testSuites.add(new TestEntry("Phase 5: Multi-Process Real TCP Cluster Demo", MultiProcessClusterDemo::run));
         testSuites.add(new TestEntry("Phase 6: Network Failures & Chaos Testing Suite (In-Memory)", Phase6NetworkFailuresTest::run));
         testSuites.add(new TestEntry("Phase 6: Real TCP Sockets Chaos Injection Test", TcpChaosTest::run));
+        testSuites.add(new TestEntry("Phase 8.1: High-Performance Leader Lease & ReadIndex Test", Phase8LeaderLeaseTest::run));
 
         System.out.println("=================================================");
         System.out.println("          SidDB Regression Test Suite            ");

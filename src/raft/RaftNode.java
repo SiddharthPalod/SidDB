@@ -34,6 +34,12 @@ public class RaftNode implements AutoCloseable {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final ConcurrentHashMap<Long, List<CompletableFuture<Boolean>>> pendingProposals = new ConcurrentHashMap<>();
 
+    // Leader Lease & Linearizable Read State (Phase 8.1)
+    private final int minElectionTimeoutMs;
+    private final long leaseDurationNs;
+    private volatile long leaseExpiryNs = 0L;
+    private volatile ReadMode readMode = ReadMode.LEADER_LEASE;
+
     public RaftNode(String nodeId, List<String> peers, Transport transport, SidDBEngine stateMachine) {
         this(nodeId, peers, transport, stateMachine, null, 150, 300, 50);
     }
@@ -50,6 +56,9 @@ public class RaftNode implements AutoCloseable {
         this.transport = transport;
         this.stateMachine = stateMachine;
         this.stateStore = new RaftStateStore(stateDir);
+        this.minElectionTimeoutMs = minElectionTimeoutMs;
+        // Conservative lease duration: 80% of min election timeout in nanoseconds
+        this.leaseDurationNs = (long) (minElectionTimeoutMs * 0.80 * 1_000_000L);
 
         if (stateDir != null) {
             File dir = new File(stateDir);
@@ -109,6 +118,7 @@ public class RaftNode implements AutoCloseable {
         this.currentTerm = term;
         this.votedFor = null;
         this.leaderId = leader;
+        this.leaseExpiryNs = 0L; // Invalidate leader lease immediately
         stateStore.save(currentTerm, votedFor);
         heartbeatManager.stopHeartbeats();
         electionManager.resetElectionTimeout();
@@ -125,6 +135,7 @@ public class RaftNode implements AutoCloseable {
 
         this.role = RaftRole.LEADER;
         this.leaderId = nodeId;
+        this.leaseExpiryNs = 0L; // Will be granted upon first successful quorum heartbeat
 
         electionManager.cancelTimeout();
 
@@ -301,6 +312,123 @@ public class RaftNode implements AutoCloseable {
         }, 10, TimeUnit.MILLISECONDS);
 
         return future;
+    }
+
+    // --- Linearizable Read Interface (Phase 8.1) ---
+
+    public void renewLeaderLease() {
+        this.leaseExpiryNs = System.nanoTime() + leaseDurationNs;
+    }
+
+    public boolean hasValidLeaderLease() {
+        return role == RaftRole.LEADER && System.nanoTime() < leaseExpiryNs;
+    }
+
+    public long getLeaseExpiryNs() {
+        return leaseExpiryNs;
+    }
+
+    public ReadMode getReadMode() {
+        return readMode;
+    }
+
+    public void setReadMode(ReadMode readMode) {
+        this.readMode = readMode;
+    }
+
+    /**
+     * Executes a linearizable read using the configured ReadMode (LEADER_LEASE, READ_INDEX, or LOG_BARRIER).
+     */
+    public CompletableFuture<Object> readLinearizable(String key) {
+        if (role != RaftRole.LEADER) {
+            CompletableFuture<Object> f = new CompletableFuture<>();
+            f.completeExceptionally(new IllegalStateException("Cannot perform linearizable read on non-leader node " + nodeId));
+            return f;
+        }
+
+        switch (readMode) {
+            case LEADER_LEASE:
+                return executeLeaseRead(key);
+            case READ_INDEX:
+                return executeReadIndex(key);
+            case LOG_BARRIER:
+            default:
+                return executeLogBarrierRead(key);
+        }
+    }
+
+    private CompletableFuture<Object> executeLeaseRead(String key) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (hasValidLeaderLease()) {
+            try {
+                Object val = stateMachine != null ? stateMachine.get(key) : null;
+                future.complete(val);
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        } else {
+            // Lease expired or not yet confirmed by quorum: Fallback smoothly to ReadIndex protocol
+            return executeReadIndex(key);
+        }
+        return future;
+    }
+
+    private CompletableFuture<Object> executeReadIndex(String key) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        final long targetReadIndex;
+        synchronized (this) {
+            if (role != RaftRole.LEADER) {
+                future.completeExceptionally(new IllegalStateException("Not leader"));
+                return future;
+            }
+            targetReadIndex = log.getCommitIndex();
+        }
+
+        // Lightweight quorum confirmation (no log replication or disk writes)
+        heartbeatManager.confirmQuorum().thenAccept(quorumConfirmed -> {
+            if (!quorumConfirmed || role != RaftRole.LEADER) {
+                future.completeExceptionally(new IllegalStateException("Quorum confirmation failed during ReadIndex"));
+                return;
+            }
+
+            // Wait until state machine has applied up to targetReadIndex
+            Runnable checkApplied = new Runnable() {
+                @Override
+                public void run() {
+                    if (log.getLastApplied() >= targetReadIndex) {
+                        try {
+                            Object val = stateMachine != null ? stateMachine.get(key) : null;
+                            future.complete(val);
+                        } catch (Exception e) {
+                            future.completeExceptionally(e);
+                        }
+                    } else if (role != RaftRole.LEADER || !running.get()) {
+                        future.completeExceptionally(new IllegalStateException("Node stepped down while awaiting lastApplied"));
+                    } else {
+                        clientProposalScheduler.schedule(this, 1, TimeUnit.MILLISECONDS);
+                    }
+                }
+            };
+            checkApplied.run();
+        }).exceptionally(ex -> {
+            future.completeExceptionally(ex);
+            return null;
+        });
+
+        return future;
+    }
+
+    private CompletableFuture<Object> executeLogBarrierRead(String key) {
+        return propose("READ_BARRIER", key, null).thenApply(ok -> {
+            if (Boolean.TRUE.equals(ok) && stateMachine != null) {
+                try {
+                    return stateMachine.get(key);
+                } catch (IOException e) {
+                    throw new CompletionException(e);
+                }
+            }
+            throw new CompletionException(new IllegalStateException("Log barrier failed"));
+        });
     }
 
     // --- Getters & Setters ---

@@ -1,6 +1,5 @@
 # Compiled class files
 out/
-bin/
 *.class
 
 # Database and runtime data directories

@@ -77,6 +77,7 @@ public class SidDBServer {
         // Raft Consensus Cluster Endpoints
         server.createContext("/api/cluster/status", new ClusterStatusHandler());
         server.createContext("/api/cluster/propose", new ClusterProposeHandler());
+        server.createContext("/api/cluster/read", new ClusterReadHandler());
         server.createContext("/api/cluster/partition", new ClusterPartitionHandler());
         server.createContext("/api/cluster/heal", new ClusterHealHandler());
         server.createContext("/api/cluster/reset", new ClusterResetHandler());
@@ -553,6 +554,51 @@ public class SidDBServer {
                 }
             } catch (Exception e) {
                 sendResponse(exchange, 500, "{\"error\":\"Timeout/Failure replicating proposal: " + e.getMessage() + "\"}", "application/json");
+            }
+        }
+    }
+
+    static class ClusterReadHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 204, "", "application/json");
+                return;
+            }
+            String key = null;
+            if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                String query = exchange.getRequestURI().getQuery();
+                if (query != null && query.startsWith("key=")) {
+                    key = query.substring(4);
+                }
+            } else {
+                String body = readBody(exchange);
+                key = extractJsonField(body, "key");
+            }
+
+            if (key == null || key.isEmpty()) {
+                sendResponse(exchange, 400, "{\"error\":\"Key required\"}", "application/json");
+                return;
+            }
+
+            RaftNode leader = cluster.getLeader();
+            if (leader == null) {
+                sendResponse(exchange, 503, "{\"error\":\"No active Raft leader elected or cluster partitioned\"}", "application/json");
+                return;
+            }
+
+            try {
+                long startNs = System.nanoTime();
+                Object value = leader.readLinearizable(key).get(3, TimeUnit.SECONDS);
+                long latencyUs = (System.nanoTime() - startNs) / 1000L;
+
+                if (value != null) {
+                    sendResponse(exchange, 200, "{\"status\":\"ok\",\"key\":\"" + key + "\",\"value\":\"" + value + "\",\"leader\":\"" + leader.getNodeId() + "\",\"readMode\":\"" + leader.getReadMode() + "\",\"latencyUs\":" + latencyUs + "}", "application/json");
+                } else {
+                    sendResponse(exchange, 404, "{\"status\":\"not_found\",\"key\":\"" + key + "\",\"leader\":\"" + leader.getNodeId() + "\"}", "application/json");
+                }
+            } catch (Exception e) {
+                sendResponse(exchange, 500, "{\"error\":\"Linearizable read failed: " + e.getMessage() + "\"}", "application/json");
             }
         }
     }

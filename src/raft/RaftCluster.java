@@ -146,6 +146,22 @@ public class RaftCluster implements AutoCloseable {
         return leader.propose(commandType, key, value);
     }
 
+    public CompletableFuture<Object> readLinearizable(String key) {
+        RaftNode leader = getLeader();
+        if (leader == null) {
+            CompletableFuture<Object> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new IllegalStateException("No active leader in cluster"));
+            return failed;
+        }
+        return leader.readLinearizable(key);
+    }
+
+    public void setReadMode(ReadMode mode) {
+        for (RaftNode node : nodes.values()) {
+            node.setReadMode(mode);
+        }
+    }
+
     public void isolateNode(String nodeId) {
         network.isolateNode(nodeId);
     }
