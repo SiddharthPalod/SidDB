@@ -48,7 +48,7 @@ public class TcpChaosTest {
 
             // 2. TCP Chaos: 100% Packet Loss Injection
             chaoticTcp1.setPacketLossRate(1.0);
-            AppendEntriesArgs appendArgs = new AppendEntriesArgs(1, "node-1", 0, 0, null, 0);
+            AppendEntriesArgs appendArgs = new AppendEntriesArgs(node2.getCurrentTerm(), "node-1", 0, 0, null, 0);
             AppendEntriesReply droppedReply = chaoticTcp1.sendAppendEntries("node-1", "node-2", appendArgs);
             if (droppedReply != null) {
                 throw new AssertionError("Expected TCP packet to be dropped by ChaoticTransport, but got reply!");
@@ -59,10 +59,11 @@ public class TcpChaosTest {
             chaoticTcp1.resetChaos();
             chaoticTcp1.setLatencyJitter(150, 150);
             long t0 = System.currentTimeMillis();
-            AppendEntriesReply delayedReply = chaoticTcp1.sendAppendEntries("node-1", "node-2", appendArgs);
+            AppendEntriesArgs delayedArgs = new AppendEntriesArgs(node2.getCurrentTerm(), "node-1", 0, 0, null, 0);
+            AppendEntriesReply delayedReply = chaoticTcp1.sendAppendEntries("node-1", "node-2", delayedArgs);
             long elapsed = System.currentTimeMillis() - t0;
             if (delayedReply == null || !delayedReply.isSuccess() || elapsed < 120) {
-                throw new AssertionError("Expected TCP RPC to be delayed >= 120ms, took: " + elapsed + "ms");
+                throw new AssertionError("Expected TCP RPC to succeed and be delayed >= 120ms, took: " + elapsed + "ms, reply: " + (delayedReply != null ? delayedReply.isSuccess() : "null"));
             }
             System.out.println("  [+] TCP Latency Jitter: RPC delivered over TCP socket with " + elapsed + " ms transit delay.");
 

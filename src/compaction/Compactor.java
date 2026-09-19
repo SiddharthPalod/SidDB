@@ -5,25 +5,63 @@ import level.LevelManager;
 import sstable.SSTableEntry;
 import sstable.SSTableReader;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class Compactor {
+public class Compactor implements AutoCloseable {
 
     public static final int L0_TRIGGER_COUNT = 4;
     public static final int LN_TRIGGER_COUNT = 4;
+    public static final int L0_BACKPRESSURE_THRESHOLD = 8;
     public static final int TARGET_ENTRIES_PER_SSTABLE = 1000;
 
     private final LevelManager levelManager;
     private final int targetEntriesPerTable;
+    private final CompactionTelemetry telemetry;
+    private final ExecutorService backgroundCompactor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "SidDB-CompactorThread");
+        t.setDaemon(true);
+        return t;
+    });
+    private final AtomicBoolean isCompacting = new AtomicBoolean(false);
 
     public Compactor(LevelManager levelManager) {
-        this(levelManager, 4);
+        this(levelManager, 4, new CompactionTelemetry());
     }
 
     public Compactor(LevelManager levelManager, int targetEntriesPerTable) {
+        this(levelManager, targetEntriesPerTable, new CompactionTelemetry());
+    }
+
+    public Compactor(LevelManager levelManager, int targetEntriesPerTable, CompactionTelemetry telemetry) {
         this.levelManager = levelManager;
         this.targetEntriesPerTable = Math.max(1, targetEntriesPerTable);
+        this.telemetry = (telemetry != null) ? telemetry : new CompactionTelemetry();
+    }
+
+    public CompactionTelemetry getTelemetry() {
+        return telemetry;
+    }
+
+    public boolean isBackpressureActive() {
+        Level l0 = levelManager.getLevel(0);
+        return l0 != null && l0.size() >= L0_BACKPRESSURE_THRESHOLD;
+    }
+
+    /**
+     * Non-blocking asynchronous compaction trigger for write pipeline.
+     */
+    public CompletableFuture<Void> triggerAsyncCompaction() {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                checkAndCompact();
+            } catch (IOException e) {
+                System.err.println("[Compactor] Error in background compaction: " + e.getMessage());
+            }
+        }, backgroundCompactor);
     }
 
     /**
@@ -104,6 +142,8 @@ public class Compactor {
         System.out.println("[Compactor] Merging " + fromFiles.size() + " files from L" + fromLevelNum +
                 " and " + toOverlappingFiles.size() + " overlapping files from L" + toLevelNum);
 
+        long startTime = System.currentTimeMillis();
+
         // 4. Multi-way merge-sort
         List<SSTableReader> allInputFiles = new ArrayList<>();
         allInputFiles.addAll(fromFiles);
@@ -114,8 +154,24 @@ public class Compactor {
         // 5. Atomic replacement & disk cleanup
         levelManager.replaceLevelTables(fromLevelNum, fromFiles, toLevelNum, toOverlappingFiles, newTables);
 
+        long mergeDuration = System.currentTimeMillis() - startTime;
+        long inputBytes = 0;
+        for (SSTableReader r : allInputFiles) {
+            File f = new File(r.getBasePath() + ".sb");
+            if (f.exists()) inputBytes += f.length();
+        }
+        telemetry.recordCompaction(inputBytes, mergeDuration);
+
+        // Record disk bytes for new tables
+        long outputBytes = 0;
+        for (SSTableReader r : newTables) {
+            File f = new File(r.getBasePath() + ".sb");
+            if (f.exists()) outputBytes += f.length();
+        }
+        telemetry.recordDiskWrite(outputBytes);
+
         System.out.println("[Compactor] Level " + fromLevelNum + " -> Level " + toLevelNum +
-                " compaction completed! (L" + fromLevelNum + " size: " + fromLevel.size() +
+                " compaction completed in " + mergeDuration + "ms! (L" + fromLevelNum + " size: " + fromLevel.size() +
                 ", L" + toLevelNum + " size: " + toLevel.size() + ")");
 
         // Check if next level needs compaction now (cascading)
@@ -222,5 +278,18 @@ public class Compactor {
             }
         }
         return true;
+    }
+
+    @Override
+    public void close() {
+        backgroundCompactor.shutdown();
+        try {
+            if (!backgroundCompactor.awaitTermination(3, TimeUnit.SECONDS)) {
+                backgroundCompactor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            backgroundCompactor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }

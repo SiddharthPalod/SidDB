@@ -32,6 +32,10 @@ public class Phase3CompactionTest {
         }
     }
 
+    public static void main(String[] args) {
+        run();
+    }
+
     public static void run() {
         System.out.println("\n--- [Running Phase3CompactionTest (L0 -> L1 -> L2 Cascading Compaction)] ---");
         String dbDir = "test_compaction_data";
@@ -48,6 +52,12 @@ public class Phase3CompactionTest {
                         int id = (batch * 10) + i;
                         db.put(String.format("k_%03d", id), "val_" + id);
                     }
+                }
+
+                // Wait for asynchronous compaction to complete L0 -> L1 merge
+                long deadline = System.currentTimeMillis() + 3000;
+                while (System.currentTimeMillis() < deadline && lm.getLevel(0).size() > 0) {
+                    Thread.sleep(20);
                 }
 
                 // After 4 flushes of 10 keys, L0 reached 4 files and triggered L0 -> L1 compaction!

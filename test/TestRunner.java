@@ -36,6 +36,7 @@ public class TestRunner {
         testSuites.add(new TestEntry("Phase 6: Real TCP Sockets Chaos Injection Test", TcpChaosTest::run));
         testSuites.add(new TestEntry("Phase 8.1: High-Performance Leader Lease & ReadIndex Test", Phase8LeaderLeaseTest::run));
         testSuites.add(new TestEntry("Phase 8.2: Follower WAL Durability & Dynamic fsync Test", Phase8DurabilityFsyncTest::run));
+        testSuites.add(new TestEntry("Phase 8.3: Decoupled Asynchronous Compactor & WAF/SAF Telemetry Test", Phase8CompactionTelemetryTest::run));
 
         System.out.println("=================================================");
         System.out.println("          SidDB Regression Test Suite            ");

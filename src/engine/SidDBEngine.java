@@ -75,13 +75,22 @@ public class SidDBEngine implements AutoCloseable {
 
     /**
      * Executes a multi-key atomic WriteBatch (ACID Atomicity & Durability):
-     * 1. Atomically appends the entire batch to the WAL (fsync).
-     * 2. Applies all mutations into the active MemTable with a monotonic sequence number.
-     * 3. Triggers flush if threshold reached.
+     * 1. Applies backpressure throttling if L0 SSTable queue is saturated.
+     * 2. Atomically appends the entire batch to the WAL (fsync) and tracks telemetry.
+     * 3. Applies all mutations into the active MemTable with a monotonic sequence number.
+     * 4. Triggers flush if threshold reached.
      */
     public synchronized void write(WriteBatch batch) throws IOException {
         if (batch == null || batch.size() == 0) {
             return;
+        }
+
+        // Apply backpressure throttling if L0 compaction is lagging
+        if (compactor.isBackpressureActive()) {
+            compactor.getTelemetry().recordBackpressureEvent();
+            try {
+                Thread.sleep(5); // 5ms soft backpressure throttle
+            } catch (InterruptedException ignored) {}
         }
 
         long seq = sequenceNumber.incrementAndGet();
@@ -89,10 +98,14 @@ public class SidDBEngine implements AutoCloseable {
         // 1. Write entire batch atomically to WAL first
         wal.appendBatch(batch, seq);
 
-        // 2. Apply all mutations into active MemTable
+        // 2. Apply all mutations into active MemTable and record telemetry
+        long logicalBytes = 0;
         for (WriteBatch.Op op : batch.getOperations()) {
             activeMemTable.put(op.getKey(), op.getValue(), seq);
+            logicalBytes += op.getKey().length() + (op.getValue() != null ? op.getValue().toString().length() : 0);
         }
+        compactor.getTelemetry().recordUserWrite(logicalBytes);
+        compactor.getTelemetry().recordDiskWrite(logicalBytes + 16); // WAL frame overhead
 
         // 3. Flush if threshold reached
         if (activeMemTable.size() >= memTableThreshold) {
@@ -183,12 +196,19 @@ public class SidDBEngine implements AutoCloseable {
         // 3. Write frozen snapshot to L0 SSTable preserving exact epochs/seq
         levelManager.flushMemTableToL0(sstEntries);
 
+        // Record disk write bytes for flushed L0 table
+        long flushedBytes = 0;
+        for (SSTableEntry e : sstEntries) {
+            flushedBytes += e.getKey().length() + (e.getValue() != null ? e.getValue().toString().length() : 0) + 16;
+        }
+        compactor.getTelemetry().recordDiskWrite(flushedBytes);
+
         // 4. Clear frozen MemTable
         this.frozenMemTable = null;
         System.out.println("[Engine] Flush to Level 0 completed successfully!");
 
-        // 5. Trigger Compaction check (L0 -> L1 -> L2 cascading)
-        compactor.checkAndCompact();
+        // 5. Trigger Compaction asynchronously in background (L0 -> L1 -> L2 cascading)
+        compactor.triggerAsyncCompaction();
     }
 
     public synchronized int size() {
@@ -264,6 +284,7 @@ public class SidDBEngine implements AutoCloseable {
 
     @Override
     public synchronized void close() throws IOException {
+        compactor.close();
         wal.close();
         levelManager.close();
     }

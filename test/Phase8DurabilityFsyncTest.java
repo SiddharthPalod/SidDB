@@ -33,6 +33,7 @@ public class Phase8DurabilityFsyncTest {
                 boolean ok = leader.propose("PUT", "durable:k" + i, "val" + i).get(2000, TimeUnit.MILLISECONDS);
                 assert ok : "Write " + i + " must commit";
             }
+            Thread.sleep(150); // Ensure commitIndex applied across all nodes in cluster
             System.out.println("  ✓ 10 writes committed across quorum.");
 
             // Verify disk files on followers
