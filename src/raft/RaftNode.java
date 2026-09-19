@@ -33,6 +33,22 @@ public class RaftNode implements AutoCloseable {
     private final ScheduledExecutorService clientProposalScheduler = Executors.newSingleThreadScheduledExecutor();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final ConcurrentHashMap<Long, List<CompletableFuture<Boolean>>> pendingProposals = new ConcurrentHashMap<>();
+    private final ConcurrentLinkedQueue<PendingProposal> proposalQueue = new ConcurrentLinkedQueue<>();
+    private final AtomicBoolean groupCommitInProgress = new AtomicBoolean(false);
+
+    private static class PendingProposal {
+        final String commandType;
+        final String key;
+        final Object value;
+        final CompletableFuture<Boolean> future;
+
+        PendingProposal(String commandType, String key, Object value, CompletableFuture<Boolean> future) {
+            this.commandType = commandType;
+            this.key = key;
+            this.value = value;
+            this.future = future;
+        }
+    }
 
     // Leader Lease & Linearizable Read State (Phase 8.1)
     private final int minElectionTimeoutMs;
@@ -135,6 +151,10 @@ public class RaftNode implements AutoCloseable {
             }
         }
         pendingProposals.clear();
+        PendingProposal pp;
+        while ((pp = proposalQueue.poll()) != null) {
+            pp.future.complete(false);
+        }
     }
 
     public synchronized void becomeLeader() {
@@ -277,32 +297,83 @@ public class RaftNode implements AutoCloseable {
         return new AppendEntriesReply(currentTerm, true, log.getLastLogIndex());
     }
 
-    // --- Client Proposal Interface ---
+    // --- Client Proposal Interface with Group Commit Batching ---
 
-    public synchronized CompletableFuture<Boolean> propose(String commandType, String key, Object value) {
+    public CompletableFuture<Boolean> propose(String commandType, String key, Object value) {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
 
-        if (role != RaftRole.LEADER) {
+        if (role != RaftRole.LEADER || !running.get()) {
             future.complete(false);
             return future;
         }
 
-        RaftLogEntry entry = log.append(currentTerm, commandType, key, value);
-        long targetIndex = entry.getIndex();
+        proposalQueue.add(new PendingProposal(commandType, key, value, future));
+        processProposalQueue();
+        return future;
+    }
 
-        if (peers.isEmpty()) {
-            log.setCommitIndex(targetIndex);
-            applyCommittedEntries();
-            future.complete(true);
-            return future;
+    private void processProposalQueue() {
+        while (groupCommitInProgress.compareAndSet(false, true)) {
+            try {
+                while (!proposalQueue.isEmpty()) {
+                    List<PendingProposal> batch = new ArrayList<>();
+                    PendingProposal p;
+                    while ((p = proposalQueue.poll()) != null) {
+                        batch.add(p);
+                        if (batch.size() >= 128) break;
+                    }
+                    if (batch.isEmpty()) break;
+
+                    synchronized (this) {
+                        if (role != RaftRole.LEADER || !running.get()) {
+                            for (PendingProposal item : batch) {
+                                item.future.complete(false);
+                            }
+                            continue;
+                        }
+
+                        List<RaftLogEntry> entriesToAppend = new ArrayList<>(batch.size());
+                        long baseIndex = log.getLastLogIndex();
+                        for (int i = 0; i < batch.size(); i++) {
+                            PendingProposal item = batch.get(i);
+                            long nextIndex = baseIndex + 1 + i;
+                            RaftLogEntry entry = new RaftLogEntry(currentTerm, nextIndex, item.commandType, item.key, item.value);
+                            entriesToAppend.add(entry);
+                        }
+
+                        // Batch append and execute single fsync on leader
+                        log.appendBatch(entriesToAppend);
+
+                        for (int i = 0; i < batch.size(); i++) {
+                            PendingProposal item = batch.get(i);
+                            RaftLogEntry entry = entriesToAppend.get(i);
+                            long targetIndex = entry.getIndex();
+
+                            if (peers.isEmpty()) {
+                                log.setCommitIndex(targetIndex);
+                                applyCommittedEntries();
+                                item.future.complete(true);
+                            } else {
+                                pendingProposals.computeIfAbsent(targetIndex, k -> new CopyOnWriteArrayList<>()).add(item.future);
+                                scheduleProposalTimeout(item.future, targetIndex);
+                            }
+                        }
+
+                        if (!peers.isEmpty()) {
+                            heartbeatManager.broadcastAppendEntries();
+                        }
+                    }
+                }
+            } finally {
+                groupCommitInProgress.set(false);
+            }
+            if (proposalQueue.isEmpty() || role != RaftRole.LEADER || !running.get()) {
+                break;
+            }
         }
+    }
 
-        pendingProposals.computeIfAbsent(targetIndex, k -> new CopyOnWriteArrayList<>()).add(future);
-
-        // Broadcast replication immediately via heartbeat manager
-        heartbeatManager.broadcastAppendEntries();
-
-        // Safety fallback timeout check
+    private void scheduleProposalTimeout(CompletableFuture<Boolean> future, long targetIndex) {
         clientProposalScheduler.schedule(new Runnable() {
             @Override
             public void run() {
@@ -317,8 +388,6 @@ public class RaftNode implements AutoCloseable {
                 }
             }
         }, 10, TimeUnit.MILLISECONDS);
-
-        return future;
     }
 
     // --- Linearizable Read Interface (Phase 8.1) ---

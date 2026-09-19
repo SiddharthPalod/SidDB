@@ -21,11 +21,17 @@ public class MultiProcessCluster implements AutoCloseable {
     private final List<DistributedClient> clients = new ArrayList<>();
     private final String javaBin;
     private final String classpath = "out";
+    private raft.SyncPolicy syncPolicy = raft.SyncPolicy.SYNC_EVERY_ENTRY;
 
     public MultiProcessCluster(String baseDir, int nodeCount, int basePort) {
+        this(baseDir, nodeCount, basePort, raft.SyncPolicy.SYNC_EVERY_ENTRY);
+    }
+
+    public MultiProcessCluster(String baseDir, int nodeCount, int basePort, raft.SyncPolicy syncPolicy) {
         this.baseDir = baseDir;
         this.nodeCount = nodeCount;
         this.basePort = basePort;
+        this.syncPolicy = (syncPolicy != null) ? syncPolicy : raft.SyncPolicy.SYNC_EVERY_ENTRY;
         this.javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
 
         for (int i = 1; i <= nodeCount; i++) {
@@ -33,6 +39,14 @@ public class MultiProcessCluster implements AutoCloseable {
             ports.add(basePort + i - 1);
             clients.add(new DistributedClient("127.0.0.1", basePort + i - 1, "node-" + i));
         }
+    }
+
+    public raft.SyncPolicy getSyncPolicy() {
+        return syncPolicy;
+    }
+
+    public void setSyncPolicy(raft.SyncPolicy syncPolicy) {
+        this.syncPolicy = syncPolicy;
     }
 
     public void start() throws Exception {
@@ -54,7 +68,8 @@ public class MultiProcessCluster implements AutoCloseable {
 
             ProcessBuilder pb = new ProcessBuilder(
                     javaBin, "-cp", classpath, "server.DistributedNodeServer",
-                    nodeIds.get(i), String.valueOf(ports.get(i)), peersConfig.toString(), nodeDir.getAbsolutePath()
+                    nodeIds.get(i), String.valueOf(ports.get(i)), peersConfig.toString(), nodeDir.getAbsolutePath(),
+                    syncPolicy.name()
             );
             pb.redirectErrorStream(true);
             Process proc = pb.start();

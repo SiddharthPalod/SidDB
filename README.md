@@ -14,10 +14,11 @@
    - [Decoupled Compactor & Telemetry](#5-decoupled-asynchronous-compactor--wafsaf-telemetry)
 4. [Empirical Benchmarks & Performance](#-empirical-benchmarks--performance)
 5. [Chaos Engineering & Partition Tolerance](#-chaos-engineering--partition-tolerance)
-6. [Interactive Visualizer Studio](#-interactive-visualizer-studio)
-7. [Getting Started & CLI Commands](#-getting-started--cli-commands)
-8. [Regression Test Suite](#-regression-test-suite)
-9. [Project Directory Layout](#-project-directory-layout)
+6. [State-of-the-Art & Research LSM Comparison](#-state-of-the-art--research-lsm-comparison)
+7. [Interactive Visualizer Studio](#-interactive-visualizer-studio)
+8. [Getting Started & CLI Commands](#-getting-started--cli-commands)
+9. [Regression Test Suite](#-regression-test-suite)
+10. [Project Directory Layout](#-project-directory-layout)
 
 ---
 
@@ -155,6 +156,41 @@ SidDB was subjected to rigorous chaos engineering via `ChaoticTransport` across 
 | **Process** | Flapping Node (Rapid Crash Loops) | Monotonic term progression prevents destabilizing quorum | **TOLERATED** |
 | **Replication**| Slow Follower Catch-up | Leader decrements `nextIndex` until match, streams delta | **TOLERATED** |
 | **Storage** | Disk / WAL I/O Fault Injection | Node transitions to OFFLINE, quorum promotes healthy peer | **TOLERATED** |
+
+---
+
+## 🔬 State-of-the-Art & Research LSM Comparison
+
+Empirical comparison of **SidDB** against production engines (**RocksDB**) and research LSM architectures (**SILK**, **Nova-LSM**, **Scavenger / TerarkDB**, **HATS / Cassandra**):
+
+### 1. Numerical Performance Scorecard
+
+| Workload & Metric | SidDB (In-Memory) | SidDB (Multi-Process TCP) | RocksDB / Production | SOTA Research Systems |
+| :--- | :--- | :--- | :--- | :--- |
+| **Linearizable Read (P50)** | **0.006 ms** ($6\text{ µs}$) | **4.03 ms** | $\sim 0.008\text{ ms}$ (local non-Raft) | $25.0 - 40.0\text{ ms}$ (Standard Raft / Cassandra) |
+| **Linearizable Read Throughput** | **76,954 ops/s** | **3,904 ops/s** | $\sim 150,000\text{ ops/s}$ (local) | $600 - 1,200\text{ ops/s}$ (Quorum Raft) |
+| **Cached Read Throughput** | **119,729 ops/s** | **3,246 ops/s** | $\sim 180,000\text{ ops/s}$ (local) | $\sim 2,500\text{ ops/s}$ (TCP Cache) |
+| **Sync Write Throughput** | **5,372 ops/s** | **54.04 ops/s** (3-node) / **100.6 ops/s** (1-node) | $10,000 - 45,000\text{ ops/s}$ (Group `fsync`) | $200,000 - 500,000\text{ ops/s}$ (Nova RDMA) |
+| **Write Amplification (WAF)** | **3.55x** | **3.55x** | $2.5\text{x} - 4.0\text{x}$ | **1.50x** (Scavenger KV-Separation) |
+| **Space Amplification (SAF)** | **4.51x** | **4.51x** | $2.0\text{x} - 3.5\text{x}$ | **1.96x – 2.21x** (Scavenger) |
+| **Crash Recovery / Failover** | **< 5 ms** | **382 – 432 ms** | $1,000 - 5,000\text{ ms}$ | $500 - 2,000\text{ ms}$ |
+| **Follower Crash Data Loss** | **0 records (0%)** | **0 records (0%)** | $0\%$ (Sync) / Window (Async) | $0\%$ |
+| **Chaos Scenarios Passed** | **9 / 9 (100%)** | **9 / 9 (100%)** | External harness required | External harness required |
+
+---
+
+### 2. Architectural Trade-Off Summary
+
+* **Where SidDB Wins**:
+  * **$6\text{ µs}$ In-Memory / $4\text{ ms}$ TCP Linearizable Reads**: `LEADER_LEASE` + `READ_INDEX` eliminates consensus log append latency.
+  * **Zero Data Loss ($0\%$ loss)**: `SYNC_EVERY_ENTRY` enforces physical `fsync` on followers prior to commit ack.
+  * **Sub-500ms Failover ($382\text{ ms}$)**: Adaptive randomized election timers recover cluster quorum in $< 450\text{ ms}$.
+  * **100% Chaos Survival (9/9 Scenarios)**: Verified against split-brain, packet drops, flapping nodes, and I/O faults.
+* **Where SidDB Has Gaps**:
+  * **Disk Write Throughput ($54\text{--}100\text{ ops/s}$ vs $10\text{k}+$)**: Hard physical single-entry SSD flush ceiling + Java socket serialization vs C++ native ring buffers.
+  * **Space Amplification ($4.51\text{x}$ vs $1.96\text{x}$)**: Monolithic `.sb` blocks lack Scavenger/WiscKey key-value separation for large payloads.
+  * **Static Compaction Backpressure ($5\text{ ms}$)**: Lacks SILK dynamic I/O preemption and HATS replica co-scheduling during high sustained write bursts.
+  * **Shared-Nothing I/O Ceiling**: Lacks Nova-LSM RDMA storage disaggregation for cross-node disk offloading.
 
 ---
 

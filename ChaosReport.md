@@ -1,6 +1,6 @@
 # SidDB Chaos Engineering & Consistency Verification Report
 
-**Generated at:** `2026-09-19 14:04:29`  
+**Generated at:** `2026-09-19 23:39:43`  
 **Cluster Architecture:** Distributed Raft Consensus with LSM Storage Engine (`SidDBEngine`)  
 
 ## Executive Summary
@@ -16,14 +16,14 @@
 
 | # | Scenario | Status | Duration | Observation & Invariant Validation |
 |---|---|---|---|---|
-| 1 | **25% Random Packet Loss** | `[PASS] OK` | 58 ms | Leader node-1 elected; writes committed in 18 ms under 25% drop rate (dropped: 1 pkts) |
-| 2 | **Network Latency & Jitter (50ms - 150ms)** | `[PASS] OK` | 162 ms | Replicated across nodes with jitter in 121 ms (delayed msgs: 8) |
-| 3 | **Slow Follower & Fast Catch-up** | `[PASS] OK` | 60 ms | Lagging node 'node-2' backtracked nextIndex and synchronized to log index 12 |
-| 4 | **Leader Crash & Disk Reboot** | `[PASS] OK` | 413 ms | Old leader 'node-1' crashed. New leader 'node-2' elected in 302 ms. Rebooted node reconciled. |
-| 5 | **Asymmetric Partition & Split-Brain** | `[PASS] OK` | 989 ms | Minority partition write rejected (CORRECT); Majority committed (CORRECT); Healed state converged to 'majority-true-val' |
-| 6 | **Out-of-Order Message Delivery** | `[PASS] OK` | 89 ms | Out-of-order RPCs safely filtered by Raft prevLogIndex/term invariants across all nodes |
-| 7 | **Correlated Multi-Node Crash** | `[PASS] OK` | 256 ms | Crashed 1 nodes simultaneously (node-1). Surviving quorum committed write; rebooted nodes caught up. |
-| 8 | **Flapping Node (Rapid Crash/Reboot Loop)** | `[PASS] OK` | 589 ms | Node 'node-1' survived 4 crash/reboot loops without corrupting monotonic terms or log integrity. |
+| 1 | **25% Random Packet Loss** | `[PASS] OK` | 49 ms | Leader node-1 elected; writes committed in 8 ms under 25% drop rate (dropped: 1 pkts) |
+| 2 | **Network Latency & Jitter (50ms - 150ms)** | `[PASS] OK` | 172 ms | Replicated across nodes with jitter in 132 ms (delayed msgs: 8) |
+| 3 | **Slow Follower & Fast Catch-up** | `[PASS] OK` | 54 ms | Lagging node 'node-2' backtracked nextIndex and synchronized to log index 12 |
+| 4 | **Leader Crash & Disk Reboot** | `[PASS] OK` | 304 ms | Old leader 'node-1' crashed. New leader 'node-3' elected in 201 ms. Rebooted node reconciled. |
+| 5 | **Asymmetric Partition & Split-Brain** | `[PASS] OK` | 946 ms | Minority partition write rejected (CORRECT); Majority committed (CORRECT); Healed state converged to 'majority-true-val' |
+| 6 | **Out-of-Order Message Delivery** | `[PASS] OK` | 162 ms | Out-of-order RPCs safely filtered by Raft prevLogIndex/term invariants across all nodes |
+| 7 | **Correlated Multi-Node Crash** | `[PASS] OK` | 303 ms | Crashed 1 nodes simultaneously (node-1). Surviving quorum committed write; rebooted nodes caught up. |
+| 8 | **Flapping Node (Rapid Crash/Reboot Loop)** | `[PASS] OK` | 570 ms | Node 'node-1' survived 4 crash/reboot loops without corrupting monotonic terms or log integrity. |
 | 9 | **Storage / Disk Fault Simulation** | `[PASS] OK` | 71 ms | Node 'node-1' handled simulated I/O fault; healthy quorum preserved durability and caught up node on restart. |
 
 ## 2. Partition Tolerance & Linearizability Verification
@@ -56,10 +56,10 @@ SidDB shifts from **Single-Node ACID** (Phase 4) to **Distributed CP (Consistenc
 
 | Measured Invariant / Operation | Value | Unit | Architectural Significance |
 |---|---|---|---|
-| Baseline Commit Latency (3-node in-memory quorum) | 10.00 | ms / write | High |
-| Packet Loss Commit Latency (2 writes) | 18.00 | ms | High |
-| Latency Jitter Commit Time (2 writes) | 121.00 | ms | High |
-| Leader Failover & Election Duration | 302.00 | ms | High |
+| Baseline Commit Latency (3-node in-memory quorum) | 4.00 | ms / write | High |
+| Packet Loss Commit Latency (2 writes) | 8.00 | ms | High |
+| Latency Jitter Commit Time (2 writes) | 132.00 | ms | High |
+| Leader Failover & Election Duration | 201.00 | ms | High |
 
 ## 4. Failure Mode Landscape & Distributed Fault Taxonomy
 

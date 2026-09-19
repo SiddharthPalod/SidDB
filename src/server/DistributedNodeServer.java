@@ -43,6 +43,11 @@ public class DistributedNodeServer {
         int tcpPort = Integer.parseInt(args[1]);
         String peersConfig = args.length > 2 ? args[2] : "";
         String dbDir = args.length > 3 ? args[3] : "data/distributed_" + nodeId;
+        String syncPolicyStr = args.length > 4 ? args[4] : "SYNC_EVERY_ENTRY";
+        raft.SyncPolicy syncPolicy = raft.SyncPolicy.SYNC_EVERY_ENTRY;
+        try {
+            syncPolicy = raft.SyncPolicy.valueOf(syncPolicyStr.trim().toUpperCase());
+        } catch (Exception ignored) {}
 
         List<String> peerIds = new ArrayList<>();
         Map<String, String> peerHostMap = new HashMap<>();
@@ -78,7 +83,7 @@ public class DistributedNodeServer {
         // 3. Initialize Raft State Machine
         List<String> allClusterNodes = new ArrayList<>(peerIds);
         allClusterNodes.add(nodeId);
-        RaftNode raftNode = new RaftNode(nodeId, allClusterNodes, transport, engine, dir.getAbsolutePath(), 400, 800, 80);
+        RaftNode raftNode = new RaftNode(nodeId, allClusterNodes, transport, engine, dir.getAbsolutePath(), 400, 800, 80, syncPolicy);
         raftNode.start();
 
         System.out.println("==================================================================");

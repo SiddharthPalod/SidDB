@@ -13,6 +13,10 @@ import java.util.concurrent.TimeUnit;
 
 public class Phase5RaftCrashRecoveryTest {
 
+    public static void main(String[] args) throws Exception {
+        run();
+    }
+
     private static final String TEST_DIR = "test_raft_recovery_data";
 
     private static void deleteDirectory(File dir) {

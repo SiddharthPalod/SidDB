@@ -1,6 +1,6 @@
 # SidDB Production-Grade Performance Benchmark Report
 
-**Generated at:** `2026-09-19 14:31:57`  
+**Generated at:** `2026-09-19 23:43:54`  
 **Target Storage Engine:** SidDB LSM Engine (MemTable + WAL + Multi-level SSTables)  
 **Consensus Protocol:** Multi-Node Raft Consensus with Pipelined Quorum Commit  
 **Evaluation Methodology:** Repeated statistical runs (median, min/max, std dev, microsecond timer resolution)  
@@ -20,42 +20,42 @@
 
 | Workload | Nodes | Clients | Throughput (Median) | Min / Max ops/s | Std Dev | P50 | P95 | P99 | P99.9 | Success Rate |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **Put** | 3 | 1 | 14.36 ops/s | 13.6 / 14.4 | ±0.6 | 49.42 ms | 244.33 ms | 444.46 ms | 444.46 ms | 100.00% |
-| **Put** | 3 | 16 | 22.41 ops/s | 20.3 / 22.4 | ±1.5 | 704.32 ms | 2277.55 ms | 3330.19 ms | 3425.72 ms | 100.00% |
-| **Put** | 3 | 64 | 13.57 ops/s | 11.7 / 13.6 | ±1.3 | 3128.09 ms | 7472.46 ms | 8213.63 ms | 11098.79 ms | 88.85% |
-| **Put** | 5 | 16 | 12.92 ops/s | 12.6 / 12.9 | ±0.2 | 1074.33 ms | 2679.31 ms | 4999.13 ms | 5285.39 ms | 99.17% |
-| **Put** | 1 | 16 | 53.64 ops/s | 41.2 / 53.6 | ±8.8 | 286.14 ms | 854.52 ms | 1198.13 ms | 1489.00 ms | 100.00% |
-| **Get local** | 3 | 16 | 2107.38 ops/s | 1303.1 / 2107.4 | ±568.7 | 11.13 ms | 26.45 ms | 62.02 ms | 110.13 ms | 100.00% |
-| **Get local** | 5 | 16 | 1551.79 ops/s | 670.8 / 1551.8 | ±622.9 | 8.96 ms | 33.72 ms | 125.59 ms | 220.30 ms | 71.00% |
-| **Get linearizable** | 3 | 16 | 1189.18 ops/s | 1001.8 / 1189.2 | ±132.5 | 14.77 ms | 25.48 ms | 36.09 ms | 72.66 ms | 100.00% |
-| **Get linearizable** | 5 | 16 | 377.34 ops/s | 377.3 / 377.3 | ±0.0 | 5.99 ms | 58.85 ms | 719.57 ms | 981.75 ms | 28.50% |
-| **Compaction** | 3 | 16 | 30.49 ops/s | 30.5 / 30.5 | ±0.0 | 434.58 ms | 1188.34 ms | 1216.37 ms | 1216.37 ms | 46.00% |
-| **Leader recovery** | 3 | 1 | 1.95 ops/s | 1.8 / 2.0 | ±0.1 | 571.00 ms | 571.00 ms | 571.00 ms | 571.00 ms | 100.00% |
-| **Leader recovery** | 5 | 1 | 2.26 ops/s | 2.1 / 2.3 | ±0.1 | 471.00 ms | 471.00 ms | 471.00 ms | 471.00 ms | 100.00% |
+| **Put** | 3 | 1 | 52.80 ops/s | 49.2 / 52.8 | ±2.6 | 13.86 ms | 58.80 ms | 150.07 ms | 150.07 ms | 100.00% |
+| **Put** | 3 | 16 | 54.04 ops/s | 53.1 / 54.0 | ±0.7 | 295.22 ms | 515.48 ms | 697.40 ms | 701.72 ms | 100.00% |
+| **Put** | 3 | 64 | 18.25 ops/s | 3.8 / 18.2 | ±10.2 | 2135.27 ms | 4914.66 ms | 5381.45 ms | 6483.16 ms | 50.73% |
+| **Put** | 5 | 16 | 38.88 ops/s | 7.1 / 38.9 | ±22.5 | 563.05 ms | 2858.92 ms | 3542.64 ms | 3561.01 ms | 84.38% |
+| **Put** | 1 | 16 | 100.63 ops/s | 91.7 / 100.6 | ±6.3 | 145.86 ms | 402.16 ms | 486.05 ms | 509.48 ms | 100.00% |
+| **Get local** | 3 | 16 | 3246.86 ops/s | 3025.0 / 3246.9 | ±156.9 | 4.18 ms | 11.80 ms | 23.69 ms | 61.42 ms | 100.00% |
+| **Get local** | 5 | 16 | 2090.20 ops/s | 1794.1 / 2090.2 | ±209.4 | 8.77 ms | 12.69 ms | 21.53 ms | 30.48 ms | 100.00% |
+| **Get linearizable** | 3 | 16 | 3904.65 ops/s | 3105.5 / 3904.7 | ±565.1 | 4.03 ms | 9.08 ms | 50.02 ms | 54.29 ms | 100.00% |
+| **Get linearizable** | 5 | 16 | 3063.88 ops/s | 2875.8 / 3063.9 | ±133.0 | 5.12 ms | 9.21 ms | 15.17 ms | 35.16 ms | 100.00% |
+| **Compaction** | 3 | 16 | 58.56 ops/s | 58.6 / 58.6 | ±0.0 | 269.42 ms | 425.46 ms | 427.19 ms | 441.63 ms | 100.00% |
+| **Leader recovery** | 3 | 1 | 2.55 ops/s | 2.2 / 2.6 | ±0.2 | 449.00 ms | 449.00 ms | 449.00 ms | 449.00 ms | 100.00% |
+| **Leader recovery** | 5 | 1 | 2.31 ops/s | 2.3 / 2.3 | ±0.0 | 436.00 ms | 436.00 ms | 436.00 ms | 436.00 ms | 100.00% |
 
 ## 3. Read Workload Quality & Error Breakdown
 
 | Workload | Nodes | Total Requests | Successful Reads | NOT_FOUND | Timeouts | RPC Failures | Success Rate |
 |---|---|---|---|---|---|---|---|
 | **Get local** | 3 | 3000 | 3000 | 0 | 0 | 0 | **100.00%** |
-| **Get local** | 5 | 3000 | 2130 | 870 | 0 | -870 | **71.00%** |
+| **Get local** | 5 | 3000 | 3000 | 0 | 0 | 0 | **100.00%** |
 | **Get linearizable** | 3 | 2000 | 2000 | 0 | 0 | 0 | **100.00%** |
-| **Get linearizable** | 5 | 2000 | 570 | 0 | 0 | 1430 | **28.50%** |
+| **Get linearizable** | 5 | 2000 | 2000 | 0 | 0 | 0 | **100.00%** |
 
 ## 4. Failover Recovery & Durability Decomposition
 
 | Cluster Size | Phase A: Election Time | Phase B: Service Recovery Time | Phase C: Data Durability | Invariant Status |
 |---|---|---|---|---|
-| **3 Nodes** | **483.00 ms** | **512.00 ms** (First write committed) | **30 / 30 keys preserved** | **100% ZERO DATA LOSS** |
-| **5 Nodes** | **445.00 ms** | **471.00 ms** (First write committed) | **30 / 30 keys preserved** | **100% ZERO DATA LOSS** |
+| **3 Nodes** | **382.00 ms** | **392.00 ms** (First write committed) | **30 / 30 keys preserved** | **100% ZERO DATA LOSS** |
+| **5 Nodes** | **420.00 ms** | **432.00 ms** (First write committed) | **30 / 30 keys preserved** | **100% ZERO DATA LOSS** |
 
 ## 5. Storage Compaction Overhead Analysis
 
 | Metric | 3-Node Cluster Observation |
 |---|---|
 | **Active Compaction Overhead** | **250.00 ms** elapsed in background SSTable consolidation |
-| **Throughput Under Compaction** | **30.49 ops/sec** sustained during cascading L0 -> L1 -> L2 flushes |
-| **P99 Write Latency Under Load** | **1216.37 ms** maximum write pause observed |
+| **Throughput Under Compaction** | **58.56 ops/sec** sustained during cascading L0 -> L1 -> L2 flushes |
+| **P99 Write Latency Under Load** | **427.19 ms** maximum write pause observed |
 
 ## 6. Engineering Analysis & Multi-Process Real TCP Insights
 
