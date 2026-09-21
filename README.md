@@ -133,11 +133,11 @@ Benchmarked across independent OS Java processes communicating strictly via real
 
 | Workload | OS Processes | Clients | Throughput (Median) | P50 Latency | P99 Latency | Durability / Integrity |
 |---|---|---|---|---|---|---|
-| **Local Get (3 Processes)** | 3 | 16 | **2,107.38 ops/s** | 11.13 ms | 62.02 ms | 100% Success |
-| **Linearizable Get (3 Processes)** | 3 | 16 | **1,189.18 ops/s** | 14.77 ms | 36.09 ms | 100% Linearizable |
-| **Put (1 Process)** | 1 | 16 | **53.64 ops/s** | 286.14 ms | 1,198.13 ms | 100% fsynced |
-| **Put (3 Processes Quorum)** | 3 | 16 | **22.41 ops/s** | 704.32 ms | 3,330.19 ms | 100% Quorum Commit |
-| **Leader Hard Kill & Failover** | 3 | 1 | **483 ms election** | **512 ms resume** | **30/30 keys** | **100% Zero Data Loss** |
+| **Local Get (3 Processes)** | 3 | 16 | **3,246.86 ops/s** | 4.18 ms | 23.69 ms | 100% Success |
+| **Linearizable Get (3 Processes)** | 3 | 16 | **3,904.65 ops/s** | 4.03 ms | 50.02 ms | 100% Linearizable |
+| **Put (1 Process)** | 1 | 16 | **100.63 ops/s** | 145.86 ms | 486.05 ms | 100% fsynced |
+| **Put (3 Processes Quorum)** | 3 | 16 | **54.04 ops/s** | 295.22 ms | 697.40 ms | 100% Quorum Commit |
+| **Leader Hard Kill & Failover** | 3 | 1 | **382 ms election** | **392 ms resume** | **30/30 keys** | **100% Zero Data Loss** |
 
 ---
 
