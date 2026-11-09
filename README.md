@@ -2,7 +2,10 @@
 **SidDB** is a production-grade, distributed, log-structured merge-tree (LSM-Tree) key-value storage engine engineered from scratch in Java. It features multi-node **Raft Consensus**, **ACID transactions with MVCC snapshot isolation**, **real OS TCP socket networking**, **asynchronous tiered SSTable compactions**, **strict follower WAL durability with dynamic fsync**, and **high-performance linearizable reads (Leader Leases & ReadIndex)**.
 
 ---
+[![SidDB Demo](https://img.youtube.com/vi/IhRNpn5Nx3I/maxresdefault.jpg)](https://youtu.be/IhRNpn5Nx3I)
+[Watch the full demo on YouTube](https://youtu.be/IhRNpn5Nx3I)
 
+---
 ## 📑 Table of Contents
 1. [Architectural Overview](#-architectural-overview)
 2. [Evolutionary Phase Roadmap](#-evolutionary-phase-roadmap)
